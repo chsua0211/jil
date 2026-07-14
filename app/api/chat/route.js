@@ -81,6 +81,16 @@ const CUSTOM_TOOLS = [
     },
   },
   {
+    name: 'memory_add',
+    description:
+      '정일님이 "기억해줘"라고 요청하신 정보를 영구 저장합니다. 이후 모든 대화에서 이 정보를 참고하게 됩니다. 핵심만 간결한 한 문장으로 저장하세요.',
+    input_schema: {
+      type: 'object',
+      properties: { content: { type: 'string', description: '기억할 내용 (간결한 한 문장)' } },
+      required: ['content'],
+    },
+  },
+  {
     name: 'watchlist_add',
     description: '관심종목 목록에 종목을 추가합니다.',
     input_schema: {
@@ -184,6 +194,11 @@ async function executeTool(supabase, name, input) {
       if (error) return { ok: false, error: error.message };
       return { ok: true, message: `${sym} 포트폴리오에서 삭제됨` };
     }
+    if (name === 'memory_add') {
+      const { error } = await supabase.from('memories').insert({ content: input.content });
+      if (error) return { ok: false, error: error.message };
+      return { ok: true, message: '기억했습니다: ' + input.content };
+    }
     if (name === 'watchlist_add') {
       const price = await fetchPrice(sym);
       if (!price) return { ok: false, error: `${sym}은(는) 존재하지 않는 티커이거나 시세를 찾을 수 없습니다.` };
@@ -204,9 +219,27 @@ async function executeTool(supabase, name, input) {
 
 export async function POST(request) {
   try {
-    const { message, history = [] } = await request.json();
+    const { message, history = [], remember = false } = await request.json();
     const supabase = getSupabase();
     const anthropic = getAnthropic();
+
+    // 0) 기억 버튼 켜고 보낸 메시지는 바로 DB에 저장
+    if (remember && message?.trim()) {
+      await supabase.from('memories').insert({ content: message.trim() });
+    }
+
+    // 0-1) 저장된 기억 전부 불러오기 (모든 대화에서 참고)
+    let memoriesText = '';
+    try {
+      const { data: mems } = await supabase
+        .from('memories')
+        .select('content, created_at')
+        .order('created_at');
+      if (mems && mems.length > 0) {
+        memoriesText =
+          '\n\n[정일님이 기억시킨 정보]\n' + mems.map((m) => `- ${m.content}`).join('\n');
+      }
+    } catch {}
 
     // 1) 정일님 스타일 불러오기
     const { data: profile } = await supabase
@@ -246,6 +279,7 @@ export async function POST(request) {
     const system = `당신은 '정일님'의 개인 투자 파트너 AI입니다. 단순히 정보를 검색해주는 봇이 아니라, 정일님의 포트폴리오와 성향을 모두 알고 있는 자산관리 파트너처럼 행동합니다.
 
 ${profileText}
+${memoriesText}
 
 ${portfolioText}
 
@@ -262,6 +296,7 @@ ${portfolioText}
 - 주 수를 직접 말씀하시면 portfolio_add를 쓰되, 평단가를 안 말씀하셨으면 avg_cost를 생략하세요 (현재가로 자동 기록).
 - 존재하지 않는 티커는 도구가 거부합니다. 회사 이름으로 말씀하시면 올바른 티커로 변환하세요 (예: 엔비디아 → NVDA, 테슬라 → TSLA, 애플 → AAPL).
 - 등록된 평단가는 대략치(등록 당시 현재가)임을 알고 계시고, 수익률도 그 기준의 대략적인 수치라고 이해하세요.
+- 정일님이 "기억해줘", "메모해둬" 등으로 요청하시면 memory_add 도구로 핵심을 저장합니다. [정일님이 기억시킨 정보]는 항상 참고해서 답합니다.
 - 최신 정보가 필요하면 web_search 도구로 직접 찾아봅니다.
 - 딱딱한 애널리스트 말투보다는 친근하면서도 정중하게. 근거는 확실하게 제시합니다.
 - 투자 조언은 참고용이고 최종 판단은 정일님 몫이라는 점을 자연스럽게 안내합니다.

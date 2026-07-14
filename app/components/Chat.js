@@ -12,6 +12,7 @@ export default function Chat({ externalPrompt, onExternalConsumed, fullHeight, o
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [remember, setRemember] = useState(false); // 📌 기억 모드
   const endRef = useRef(null);
 
   useEffect(() => {
@@ -42,12 +43,14 @@ export default function Chat({ externalPrompt, onExternalConsumed, fullHeight, o
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: trimmed,
+          remember,
           history: messages
             .filter((m) => m.role !== 'assistant' || m.content !== messages[0].content)
             .map((m) => ({ role: m.role, content: m.content })),
         }),
       });
       const { reply, error, toolsUsed } = await res.json();
+      setRemember(false); // 한 번 보내면 기억 모드 해제
       setMessages([
         ...newMessages,
         { role: 'assistant', content: reply || `문제가 생겼어요: ${error || '알 수 없음'}` },
@@ -113,18 +116,33 @@ export default function Chat({ externalPrompt, onExternalConsumed, fullHeight, o
           marginTop: 10,
           borderTop: '1px solid var(--border)',
           paddingTop: 10,
+          alignItems: 'center',
         }}
       >
+        <button
+          onClick={() => setRemember(!remember)}
+          title="기억 모드: 켜고 보내면 이 내용을 AI가 영구 기억해요"
+          style={{
+            padding: '10px 12px',
+            background: remember ? 'var(--accent)' : 'var(--panel-2)',
+            border: `1px solid ${remember ? 'var(--accent)' : 'var(--border)'}`,
+            borderRadius: 8,
+            color: remember ? '#fff' : 'var(--text-dim)',
+            fontSize: 15,
+          }}
+        >
+          📌
+        </button>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && sendText(input)}
-          placeholder="예: 엔비디아 지금 어떤가요?"
+          placeholder={remember ? '이 내용을 영구 기억시켜요...' : '예: 엔비디아 지금 어떤가요?'}
           style={{
             flex: 1,
             padding: '10px 12px',
             background: 'var(--panel-2)',
-            border: '1px solid var(--border)',
+            border: `1px solid ${remember ? 'var(--accent)' : 'var(--border)'}`,
             borderRadius: 8,
             color: 'var(--text)',
             fontSize: 13,

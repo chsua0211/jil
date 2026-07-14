@@ -49,3 +49,18 @@ create table if not exists portfolio (
   avg_cost numeric not null,                -- 평단가 (USD)
   created_at timestamptz default now()
 );
+
+-- 6) AI 기억 저장소 (정일님이 기억시킨 정보)
+create table if not exists memories (
+  id uuid primary key default gen_random_uuid(),
+  content text not null,
+  created_at timestamptz default now()
+);
+
+-- RLS 해제 (개인용 앱, 비밀번호 게이트로 보호)
+alter table investor_profile disable row level security;
+alter table portfolio disable row level security;
+alter table watchlist disable row level security;
+alter table saved_news disable row level security;
+alter table chat_messages disable row level security;
+alter table memories disable row level security;
