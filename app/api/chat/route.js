@@ -5,6 +5,31 @@ function getAnthropic() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 }
 
+// 채팅 임시기억 유지 시간 (12시간)
+const CHAT_TTL_MS = 12 * 60 * 60 * 1000;
+
+// ── [신규] GET: 12시간 지난 채팅 자동 삭제 후, 남은 채팅 반환 ──
+// Chat.js가 처음 켜질 때 이걸 불러와서 대화를 이어감 (새로고침 대응)
+export async function GET() {
+  try {
+    const supabase = getSupabase();
+    const cutoff = new Date(Date.now() - CHAT_TTL_MS).toISOString();
+
+    // 12시간 지난 메시지 삭제
+    await supabase.from('chat_messages').delete().lt('created_at', cutoff);
+
+    // 남은 메시지 시간순 반환
+    const { data } = await supabase
+      .from('chat_messages')
+      .select('role, content, created_at')
+      .order('created_at');
+
+    return Response.json({ messages: data || [] });
+  } catch (e) {
+    return Response.json({ messages: [], error: e.message }, { status: 500 });
+  }
+}
+
 // 정일님의 설문 답변을 사람이 읽을 수 있는 문장으로 변환
 function describeProfile(answers, summary) {
   if (!answers || Object.keys(answers).length === 0) {
@@ -22,6 +47,27 @@ function describeProfile(answers, summary) {
   let text = '아래는 정일님이 직접 답하신 투자 성향입니다:\n' + lines.join('\n');
   if (summary) text += `\n\n[정일님 스타일 요약]\n${summary}`;
   return text;
+}
+
+// ── [신규] 대화 히스토리 정리 ──
+// DB에서 불러온 히스토리는 저장 실패/빈 응답 등으로 역할이 꼬여 있을 수 있음.
+// Anthropic API는 user/assistant가 번갈아 나와야 하므로:
+// 1) 빈 내용 제거  2) 같은 역할 연속이면 합침  3) 첫 메시지는 user가 되도록 정리
+function sanitizeHistory(history) {
+  const clean = [];
+  for (const m of history || []) {
+    if (!m || (m.role !== 'user' && m.role !== 'assistant')) continue;
+    const content = typeof m.content === 'string' ? m.content.trim() : '';
+    if (!content) continue;
+    const last = clean[clean.length - 1];
+    if (last && last.role === m.role) {
+      last.content += '\n\n' + content;
+    } else {
+      clean.push({ role: m.role, content });
+    }
+  }
+  while (clean.length && clean[0].role !== 'user') clean.shift();
+  return clean;
 }
 
 // ── 챗봇이 쓸 수 있는 도구들 (포트폴리오/관심종목 조작) ──
@@ -83,10 +129,10 @@ const CUSTOM_TOOLS = [
   {
     name: 'memory_add',
     description:
-      '정일님이 "기억해줘"라고 요청하신 정보를 영구 저장합니다. 이후 모든 대화에서 이 정보를 참고하게 됩니다. 핵심만 간결한 한 문장으로 저장하세요.',
+      '정일님이 "기억해줘"라고 요청하신 정보를 영구 저장합니다. 이후 모든 대화에서 이 정보를 참고하게 됩니다. 단일 정보는 간결한 한 문장으로 저장하세요. 정일님이 "지금까지 내용 요약해서 기억해줘"처럼 대화 요약 저장을 요청하시면, 이번 대화의 핵심(논의한 종목, 결론, 정일님의 의견·결정사항)을 2~5문장으로 요약해서 저장하세요.',
     input_schema: {
       type: 'object',
-      properties: { content: { type: 'string', description: '기억할 내용 (간결한 한 문장)' } },
+      properties: { content: { type: 'string', description: '기억할 내용 (단일 정보는 한 문장, 대화 요약은 2~5문장)' } },
       required: ['content'],
     },
   },
@@ -297,13 +343,15 @@ ${portfolioText}
 - 존재하지 않는 티커는 도구가 거부합니다. 회사 이름으로 말씀하시면 올바른 티커로 변환하세요 (예: 엔비디아 → NVDA, 테슬라 → TSLA, 애플 → AAPL).
 - 등록된 평단가는 대략치(등록 당시 현재가)임을 알고 계시고, 수익률도 그 기준의 대략적인 수치라고 이해하세요.
 - 정일님이 "기억해줘", "메모해둬" 등으로 요청하시면 memory_add 도구로 핵심을 저장합니다. [정일님이 기억시킨 정보]는 항상 참고해서 답합니다.
+- 정일님이 "지금까지 내용 요약해서 기억해줘"처럼 대화 요약 저장을 요청하시면: 이번 대화에서 논의한 종목, 핵심 결론, 정일님의 의견이나 결정사항을 2~5문장으로 요약한 뒤 memory_add 도구로 저장합니다. 저장 후에는 무엇을 기억했는지 요약 내용을 보여드립니다.
 - 최신 정보가 필요하면 web_search 도구로 직접 찾아봅니다.
 - 딱딱한 애널리스트 말투보다는 친근하면서도 정중하게. 근거는 확실하게 제시합니다.
 - 투자 조언은 참고용이고 최종 판단은 정일님 몫이라는 점을 자연스럽게 안내합니다.
 - 확실하지 않은 건 솔직하게 모른다고 말합니다. 없는 숫자를 지어내지 않습니다.`;
 
     // 3) Claude 호출 + 도구 사용 루프
-    let messages = [...history, { role: 'user', content: message }];
+    // 히스토리 정리: 빈 내용 제거 + 역할 교대 보장 (DB에서 불러온 기록 대응)
+    let messages = sanitizeHistory([...history, { role: 'user', content: message }]);
     let toolsUsed = false;
 
     // 웹검색 사용 가능 여부에 따라 도구 구성 (안 되면 커스텀 도구만)
@@ -360,10 +408,10 @@ ${portfolioText}
       .trim();
 
     // 5) 대화 기록 저장 (실패해도 응답엔 영향 없게)
-    supabase.from('chat_messages').insert([
-      { role: 'user', content: message },
-      { role: 'assistant', content: reply },
-    ]).then(() => {}, () => {});
+    // 빈 응답은 저장하지 않음 → 나중에 불러올 때 히스토리가 꼬이지 않게
+    const toSave = [{ role: 'user', content: message }];
+    if (reply) toSave.push({ role: 'assistant', content: reply });
+    supabase.from('chat_messages').insert(toSave).then(() => {}, () => {});
 
     return Response.json({ reply, toolsUsed });
   } catch (e) {
