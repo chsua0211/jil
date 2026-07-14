@@ -40,3 +40,12 @@ create table if not exists chat_messages (
 insert into investor_profile (id, answers, summary)
 values (1, '{}', '')
 on conflict (id) do nothing;
+
+-- 5) 포트폴리오 (보유 종목)
+create table if not exists portfolio (
+  id uuid primary key default gen_random_uuid(),
+  symbol text not null,                     -- 예: NVDA
+  shares numeric not null,                  -- 보유 수량
+  avg_cost numeric not null,                -- 평단가 (USD)
+  created_at timestamptz default now()
+);

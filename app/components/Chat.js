@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 
-export default function Chat() {
+export default function Chat({ externalPrompt, onExternalConsumed }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -17,11 +17,20 @@ export default function Chat() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const send = async () => {
-    const text = input.trim();
-    if (!text || loading) return;
+  // 외부(리스크 분석 버튼 등)에서 질문이 들어오면 자동 전송
+  useEffect(() => {
+    if (externalPrompt && !loading) {
+      sendText(externalPrompt);
+      onExternalConsumed && onExternalConsumed();
+    }
+    // eslint-disable-next-line
+  }, [externalPrompt]);
 
-    const newMessages = [...messages, { role: 'user', content: text }];
+  const sendText = async (text) => {
+    const trimmed = (text || '').trim();
+    if (!trimmed || loading) return;
+
+    const newMessages = [...messages, { role: 'user', content: trimmed }];
     setMessages(newMessages);
     setInput('');
     setLoading(true);
@@ -31,7 +40,7 @@ export default function Chat() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: text,
+          message: trimmed,
           history: messages
             .filter((m) => m.role !== 'assistant' || m.content !== messages[0].content)
             .map((m) => ({ role: m.role, content: m.content })),
@@ -98,7 +107,7 @@ export default function Chat() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && send()}
+          onKeyDown={(e) => e.key === 'Enter' && sendText(input)}
           placeholder="예: 엔비디아 지금 어떤가요?"
           style={{
             flex: 1,
@@ -112,7 +121,7 @@ export default function Chat() {
           }}
         />
         <button
-          onClick={send}
+          onClick={() => sendText(input)}
           disabled={loading}
           style={{
             padding: '10px 14px',

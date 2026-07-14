@@ -45,6 +45,24 @@ export async function POST(request) {
 
     const profileText = describeProfile(profile?.answers, profile?.summary);
 
+    // 1-1) 정일님 포트폴리오 불러오기 (실시간 평가 포함) — 매 대화마다 AI가 포트폴리오를 알고 답함
+    let portfolioText = '아직 포트폴리오가 입력되지 않았습니다.';
+    try {
+      const origin = new URL(request.url).origin;
+      const pRes = await fetch(`${origin}/api/portfolio`);
+      const p = await pRes.json();
+      if (p.holdings && p.holdings.length > 0) {
+        const lines = p.holdings.map(
+          (h) =>
+            `- ${h.symbol}: ${h.shares}주, 평단 $${h.avgCost.toFixed(2)}, 현재가 $${h.price.toFixed(2)}, 평가액 $${h.value.toFixed(0)}, 수익률 ${h.pnlPct >= 0 ? '+' : ''}${h.pnlPct.toFixed(1)}%, 비중 ${h.weight.toFixed(1)}%`
+        );
+        portfolioText =
+          `[정일님의 현재 포트폴리오]\n` +
+          lines.join('\n') +
+          `\n총 평가액 $${p.total.value.toFixed(0)}, 총 손익 ${p.total.pnl >= 0 ? '+' : ''}$${p.total.pnl.toFixed(0)} (${p.total.pnlPct >= 0 ? '+' : ''}${p.total.pnlPct.toFixed(1)}%)`;
+      }
+    } catch {}
+
     // 1-2) 메시지에 티커가 있고 애널리스트 관련 질문이면 데이터 미리 가져오기
     let analystContext = '';
     const ticker = extractTicker(message);
@@ -69,18 +87,22 @@ export async function POST(request) {
     }
 
     // 2) 시스템 프롬프트: 여기가 투자 분신의 핵심
-    const system = `당신은 '정일님'의 투자 분신 AI입니다. 정일님의 관점으로 미국 주식을 분석합니다.
+    const system = `당신은 '정일님'의 개인 투자 파트너 AI입니다. 단순히 정보를 검색해주는 봇이 아니라, 정일님의 포트폴리오와 성향을 모두 알고 있는 자산관리 파트너처럼 행동합니다.
 
 ${profileText}
 
+${portfolioText}
+
 규칙:
 - 사용자는 항상 '정일님'이라고 부릅니다. '정베' 같은 다른 호칭은 절대 쓰지 않습니다.
-- 정일님의 성향에 맞춰서 조언합니다. 예를 들어 정일님이 성장주 위주시면 성장주 관점으로, 손절 원칙이 -10%면 그 기준으로 설명합니다.
 - 항상 정중한 존댓말로 답합니다.
+- 모든 조언은 정일님의 실제 포트폴리오를 기준으로 합니다. 예: 어떤 종목 이야기가 나오면 정일님이 그 종목을 보유 중인지, 수익률이 어떤지, 비중이 얼마인지 먼저 확인하고 그에 맞게 답합니다.
+- 정일님의 성향(손절 원칙, 위험 태도 등)과 실제 수익률을 연결해서 조언합니다. 예: 손절 원칙이 -10%인데 어떤 종목이 -12%면 그 사실을 짚어줍니다.
+- 리스크 분석 시 구체적으로: 특정 종목/섹터 쏠림(비중 30% 이상이면 집중 리스크 언급), 전체 손익 상태, 변동성 큰 종목 여부 등을 포트폴리오 숫자에 근거해 설명합니다.
 - 최신 정보가 필요하면 web_search 도구로 직접 찾아봅니다. 뉴스, 실적, 주가 흐름 등.
 - 딱딱한 애널리스트 말투보다는 친근하면서도 정중하게. 근거는 확실하게 제시합니다.
 - 투자 조언은 참고용이고 최종 판단은 정일님 몫이라는 점을 자연스럽게 안내합니다.
-- 확실하지 않은 건 솔직하게 모른다고 말합니다. 없는 숫자를 지어내지 않습니다.`;
+- 확실하지 않은 건 솔직하게 모른다고 말합니다. 없는 숫자를 지어내지 않습니다. 위 포트폴리오 숫자는 실시간 데이터이므로 그대로 신뢰하고 사용합니다.`;
 
     // 3) Claude 호출. 웹 검색 도구를 먼저 시도하고, 안 되면 검색 없이 다시 답한다.
     const userContent = message + analystContext;
