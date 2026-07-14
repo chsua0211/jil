@@ -21,8 +21,8 @@ const fmtKrwShort = (n) => {
   return `${sign}${abs.toLocaleString('ko-KR')}원`;
 };
 
-// 시간대별 인사말
-function greeting() {
+// 시간대별 인사말 (런처 첫 화면에서도 사용)
+export function greeting() {
   const h = new Date().getHours();
   if (h >= 5 && h < 12) return '좋은 아침이에요, 정일님';
   if (h >= 12 && h < 18) return '좋은 오후예요, 정일님';
@@ -30,7 +30,7 @@ function greeting() {
 }
 
 // 미국 정규장 개장 여부 (뉴욕 시간 월~금 9:30~16:00, 휴장일은 고려 안 함)
-function usMarketOpen() {
+export function usMarketOpen() {
   try {
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: 'America/New_York',
@@ -160,14 +160,8 @@ export default function HomeDashboard({ refreshKey }) {
 
   return (
     <div>
-      {/* 인사말 + 장 상태 */}
+      {/* 장 상태 배지 줄 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>{greeting()}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 2 }}>
-            {new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })}
-          </div>
-        </div>
         <span
           style={{
             marginLeft: 'auto',
