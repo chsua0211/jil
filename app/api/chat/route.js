@@ -93,26 +93,36 @@ const CUSTOM_TOOLS = [
   {
     name: 'portfolio_add',
     description:
-      '주 수를 알 때 포트폴리오에 종목을 추가합니다. 평단가를 모르면 생략하세요 (오늘 현재가로 자동 기록). 금액만 아는 경우엔 portfolio_add_by_amount를 대신 사용하세요.',
+      '주 수를 알 때 포트폴리오에 종목을 추가합니다. 평단가를 모르면 생략하세요 (오늘 현재가로 자동 기록). 정일님이 평단을 원화로 말씀하시면(예: "평단 145만원") avg_cost_currency를 KRW로 지정하세요. 자동으로 달러로 환산됩니다. 금액만 아는 경우엔 portfolio_add_by_amount를 대신 사용하세요.',
     input_schema: {
       type: 'object',
       properties: {
         symbol: { type: 'string', description: '종목 티커 (예: NVDA)' },
         shares: { type: 'number', description: '보유 수량' },
-        avg_cost: { type: 'number', description: '평단가 USD (모르면 생략, 현재가로 자동 기록)' },
+        avg_cost: { type: 'number', description: '평단가 숫자 (모르면 생략, 현재가로 자동 기록)' },
+        avg_cost_currency: {
+          type: 'string',
+          enum: ['KRW', 'USD'],
+          description: '평단가의 통화. "만원", "원"이면 KRW, "$"나 "달러"면 USD. 생략 시 USD.',
+        },
       },
       required: ['symbol', 'shares'],
     },
   },
   {
     name: 'portfolio_update',
-    description: '포트폴리오의 기존 종목 수량이나 평단가를 수정합니다. 티커로 종목을 찾습니다.',
+    description: '포트폴리오의 기존 종목 수량이나 평단가를 수정합니다. 티커로 종목을 찾습니다. 평단을 원화로 말씀하시면 avg_cost_currency를 KRW로 지정하세요.',
     input_schema: {
       type: 'object',
       properties: {
         symbol: { type: 'string', description: '수정할 종목 티커' },
         shares: { type: 'number', description: '새 수량 (변경 시)' },
         avg_cost: { type: 'number', description: '새 평단가 (변경 시)' },
+        avg_cost_currency: {
+          type: 'string',
+          enum: ['KRW', 'USD'],
+          description: '평단가의 통화. "만원", "원"이면 KRW. 생략 시 USD.',
+        },
       },
       required: ['symbol'],
     },
@@ -181,6 +191,26 @@ async function fetchUsdKrw() {
   return 1400; // 조회 실패 시 대략치
 }
 
+// 평단가를 USD로 정규화 + 이상치 감지
+// 반환: { ok: true, usd, note } 또는 { ok: false, error }
+async function normalizeAvgCost(rawCost, currency, currentPrice) {
+  let usd = Number(rawCost);
+  let note = '';
+  if (currency === 'KRW') {
+    const rate = await fetchUsdKrw();
+    usd = Math.round((usd / rate) * 100) / 100;
+    note = ` (원화 ${Number(rawCost).toLocaleString()}원 → 환율 ${Math.round(rate)}원/$ 환산)`;
+  }
+  // 이상치 감지: 평단이 현재가의 15배 이상 or 1/15 이하면 통화 착오 가능성이 높음
+  if (currentPrice && (usd > currentPrice * 15 || usd < currentPrice / 15)) {
+    return {
+      ok: false,
+      error: `평단가 $${usd.toLocaleString()}는 현재가 $${currentPrice.toFixed(2)}와 차이가 너무 큽니다. 원화 금액을 달러로 입력하신 것 아닌지 정일님께 확인해 주세요. 원화가 맞다면 avg_cost_currency를 'KRW'로 지정해 다시 시도하세요.`,
+    };
+  }
+  return { ok: true, usd, note };
+}
+
 // 도구 실행기: Claude가 도구를 쓰겠다고 하면 실제 DB 조작을 수행
 async function executeTool(supabase, name, input) {
   const sym = (input.symbol || '').toUpperCase().trim();
@@ -212,7 +242,14 @@ async function executeTool(supabase, name, input) {
     if (name === 'portfolio_add') {
       const price = await fetchPrice(sym);
       if (!price) return { ok: false, error: `${sym}은(는) 존재하지 않는 티커이거나 시세를 찾을 수 없습니다. 티커를 다시 확인해 주세요.` };
-      const avgCost = input.avg_cost !== undefined ? Number(input.avg_cost) : price;
+      let avgCost = price;
+      let note = ', 오늘 현재가로 기록';
+      if (input.avg_cost !== undefined) {
+        const norm = await normalizeAvgCost(input.avg_cost, input.avg_cost_currency, price);
+        if (!norm.ok) return norm;
+        avgCost = norm.usd;
+        note = norm.note;
+      }
       const { error } = await supabase.from('portfolio').insert({
         symbol: sym,
         shares: Number(input.shares),
@@ -221,19 +258,26 @@ async function executeTool(supabase, name, input) {
       if (error) return { ok: false, error: error.message };
       return {
         ok: true,
-        message: `${sym} ${input.shares}주 추가됨 (평단 $${avgCost.toFixed(2)}${input.avg_cost === undefined ? ', 오늘 현재가로 기록' : ''})`,
+        message: `${sym} ${input.shares}주 추가됨 (평단 $${avgCost.toFixed(2)}${note})`,
       };
     }
     if (name === 'portfolio_update') {
       const { data: rows } = await supabase.from('portfolio').select('*').eq('symbol', sym).limit(1);
       if (!rows || rows.length === 0) return { ok: false, error: `포트폴리오에 ${sym}이(가) 없습니다.` };
       const patch = {};
+      let note = '';
       if (input.shares !== undefined) patch.shares = Number(input.shares);
-      if (input.avg_cost !== undefined) patch.avg_cost = Number(input.avg_cost);
+      if (input.avg_cost !== undefined) {
+        const price = await fetchPrice(sym);
+        const norm = await normalizeAvgCost(input.avg_cost, input.avg_cost_currency, price);
+        if (!norm.ok) return norm;
+        patch.avg_cost = norm.usd;
+        note = norm.note;
+      }
       if (Object.keys(patch).length === 0) return { ok: false, error: '변경할 값이 없습니다.' };
       const { error } = await supabase.from('portfolio').update(patch).eq('id', rows[0].id);
       if (error) return { ok: false, error: error.message };
-      return { ok: true, message: `${sym} 수정됨` };
+      return { ok: true, message: `${sym} 수정됨${patch.avg_cost !== undefined ? ` (평단 $${patch.avg_cost.toFixed(2)}${note})` : ''}` };
     }
     if (name === 'portfolio_remove') {
       const { error } = await supabase.from('portfolio').delete().eq('symbol', sym);
@@ -340,6 +384,7 @@ ${portfolioText}
 - 정일님이 포트폴리오나 관심종목의 추가/수정/삭제를 요청하시면 도구를 사용해서 실제로 반영합니다. 반영 후 결과를 확인해 드립니다.
 - 정일님은 보통 "엔비디아에 1억 있어"처럼 금액으로 말씀하십니다. 이때는 portfolio_add_by_amount 도구를 쓰세요. 실시간 현재가로 주 수가 자동 역산됩니다. 한국어 금액 표현을 숫자로 정확히 변환하세요: 1억 = 100000000, 5천만원 = 50000000, 3백만원 = 3000000. "원", "억", "만원"이면 currency는 KRW, "$"나 "달러"면 USD입니다.
 - 주 수를 직접 말씀하시면 portfolio_add를 쓰되, 평단가를 안 말씀하셨으면 avg_cost를 생략하세요 (현재가로 자동 기록).
+- 평단가를 원화로 말씀하시면(예: "평단 145만원") 반드시 avg_cost_currency를 'KRW'로 지정하세요. 자동으로 달러 환산됩니다. 평단가는 1주당 가격입니다. "만원"·"원" 단위면 KRW, "$"·"달러"면 USD입니다.
 - 존재하지 않는 티커는 도구가 거부합니다. 회사 이름으로 말씀하시면 올바른 티커로 변환하세요 (예: 엔비디아 → NVDA, 테슬라 → TSLA, 애플 → AAPL).
 - 등록된 평단가는 대략치(등록 당시 현재가)임을 알고 계시고, 수익률도 그 기준의 대략적인 수치라고 이해하세요.
 - 정일님이 "기억해줘", "메모해둬" 등으로 요청하시면 memory_add 도구로 핵심을 저장합니다. [정일님이 기억시킨 정보]는 항상 참고해서 답합니다.

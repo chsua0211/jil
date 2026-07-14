@@ -4,10 +4,25 @@ import { useState, useEffect } from 'react';
 
 const fmt = (n) => '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
 const fmt2 = (n) => '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtKrw = (n) => '₩' + Math.round(Number(n)).toLocaleString('ko-KR');
+
+// 억/만 단위로 짧게 (예: 9억 7,600만원)
+const fmtKrwShort = (n) => {
+  const v = Math.round(Number(n));
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '-' : '';
+  if (abs >= 1e8) {
+    const eok = Math.floor(abs / 1e8);
+    const man = Math.round((abs % 1e8) / 1e4);
+    return `${sign}${eok}억${man > 0 ? ` ${man.toLocaleString('ko-KR')}만` : ''}원`;
+  }
+  if (abs >= 1e4) return `${sign}${Math.round(abs / 1e4).toLocaleString('ko-KR')}만원`;
+  return `${sign}${abs.toLocaleString('ko-KR')}원`;
+};
 
 // 현황 보기 전용 패널. 종목 추가/수정/삭제는 채팅으로.
 export default function Portfolio({ onAskRisk, refreshKey }) {
-  const [data, setData] = useState({ holdings: [], total: null });
+  const [data, setData] = useState({ holdings: [], total: null, usdKrw: null });
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -26,6 +41,7 @@ export default function Portfolio({ onAskRisk, refreshKey }) {
   }, [refreshKey]);
 
   const t = data.total;
+  const rate = data.usdKrw || 1400;
   const totalUp = t && t.pnl >= 0;
 
   return (
@@ -33,7 +49,7 @@ export default function Portfolio({ onAskRisk, refreshKey }) {
       <div className="panel-title">
         💼 내 포트폴리오
         <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-faint)' }}>
-          1분마다 갱신
+          환율 {Math.round(rate).toLocaleString('ko-KR')}원/$ · 1분마다 갱신
         </span>
       </div>
 
@@ -46,7 +62,7 @@ export default function Portfolio({ onAskRisk, refreshKey }) {
         </p>
       )}
 
-      {/* 총 자산 요약 */}
+      {/* 총 자산 요약 (달러 + 원화) */}
       {t && (
         <div
           style={{
@@ -65,11 +81,17 @@ export default function Portfolio({ onAskRisk, refreshKey }) {
           <div>
             <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>총 평가액</div>
             <div style={{ fontSize: 24, fontWeight: 700 }}>{fmt(t.value)}</div>
+            <div style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 2 }}>
+              ≈ {fmtKrwShort(t.value * rate)}
+            </div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>총 손익</div>
             <div className={totalUp ? 'up' : 'down'} style={{ fontSize: 18, fontWeight: 700 }}>
               {totalUp ? '+' : ''}{fmt(t.pnl)} ({totalUp ? '+' : ''}{t.pnlPct.toFixed(1)}%)
+            </div>
+            <div className={totalUp ? 'up' : 'down'} style={{ fontSize: 13, marginTop: 2 }}>
+              ≈ {totalUp ? '+' : ''}{fmtKrwShort(t.pnl * rate)}
             </div>
           </div>
           <button
@@ -111,9 +133,18 @@ export default function Portfolio({ onAskRisk, refreshKey }) {
                   <tr key={h.id} style={{ borderTop: '1px solid var(--border)' }}>
                     <td style={{ padding: '9px 4px', fontWeight: 600 }}>{h.symbol}</td>
                     <td style={tdR}>{h.shares}</td>
-                    <td style={tdR}>{fmt2(h.avgCost)}</td>
-                    <td style={tdR}>{fmt2(h.price)}</td>
-                    <td style={tdR}>{fmt(h.value)}</td>
+                    <td style={tdR}>
+                      {fmt2(h.avgCost)}
+                      <div style={subKrw}>{fmtKrw(h.avgCost * rate)}</div>
+                    </td>
+                    <td style={tdR}>
+                      {fmt2(h.price)}
+                      <div style={subKrw}>{fmtKrw(h.price * rate)}</div>
+                    </td>
+                    <td style={tdR}>
+                      {fmt(h.value)}
+                      <div style={subKrw}>{fmtKrwShort(h.value * rate)}</div>
+                    </td>
                     <td style={tdR} className={up ? 'up' : 'down'}>
                       {up ? '+' : ''}{h.pnlPct.toFixed(1)}%
                     </td>
@@ -135,4 +166,6 @@ const thStyle = (align) => ({
   fontWeight: 500,
 });
 
-const tdR = { padding: '9px 4px', textAlign: 'right' };
+const tdR = { padding: '9px 4px', textAlign: 'right', verticalAlign: 'top' };
+
+const subKrw = { fontSize: 11, color: 'var(--text-faint)', marginTop: 1 };

@@ -1,17 +1,30 @@
 import { getSupabase } from '../../../lib/supabase';
 
+// 원/달러 환율 조회 (실패 시 대략치)
+async function fetchUsdKrw() {
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/USD', {
+      next: { revalidate: 3600 }, // 1시간 캐시
+    });
+    const d = await res.json();
+    if (d?.rates?.KRW) return d.rates.KRW;
+  } catch {}
+  return 1400;
+}
+
 // 포트폴리오 조회: 보유 종목 + 실시간 주가 합쳐서 평가액/수익률/비중까지 계산해서 반환
+// 환율(usdKrw)도 함께 반환 → 화면에서 원화 병기
 export async function GET() {
   const supabase = getSupabase();
   const key = process.env.FINNHUB_API_KEY;
 
-  const { data: holdings } = await supabase
-    .from('portfolio')
-    .select('*')
-    .order('created_at');
+  const [{ data: holdings }, usdKrw] = await Promise.all([
+    supabase.from('portfolio').select('*').order('created_at'),
+    fetchUsdKrw(),
+  ]);
 
   if (!holdings || holdings.length === 0) {
-    return Response.json({ holdings: [], total: null });
+    return Response.json({ holdings: [], total: null, usdKrw });
   }
 
   // 실시간 주가 가져오기
@@ -68,6 +81,7 @@ export async function GET() {
   return Response.json({
     holdings: withWeight,
     total: { value: totalValue, cost: totalCost, pnl: totalPnl, pnlPct: totalPnlPct },
+    usdKrw,
   });
 }
 
