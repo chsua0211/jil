@@ -2,35 +2,51 @@
 
 import { useState, useRef, useEffect } from 'react';
 
+// 인사말은 상태와 분리해서 상수로 관리 (히스토리 전송/저장에서 제외하기 위해 greeting 플래그 사용)
+const GREETING = {
+  role: 'assistant',
+  greeting: true,
+  content:
+    '안녕하세요 정일님! 궁금한 종목이나 시장 얘기 물어봐 주세요. 포트폴리오 기반으로 분석해 드려요.\n\n말로 관리도 가능해요:\n· "엔비디아에 1억 있어" → 오늘 주가로 주 수 자동 계산해서 등록\n· "테슬라 관심종목에 넣어줘"\n· "내 포트폴리오 리스크 분석해줘"\n· "지금까지 내용 요약해서 기억해줘" → 대화 핵심을 영구 기억',
+};
+
 export default function Chat({ externalPrompt, onExternalConsumed, fullHeight, onDataChanged }) {
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content:
-        '안녕하세요 정일님! 궁금한 종목이나 시장 얘기 물어봐 주세요. 포트폴리오 기반으로 분석해 드려요.\n\n말로 관리도 가능해요:\n· "엔비디아에 1억 있어" → 오늘 주가로 주 수 자동 계산해서 등록\n· "테슬라 관심종목에 넣어줘"\n· "내 포트폴리오 리스크 분석해줘"',
-    },
-  ]);
+  const [messages, setMessages] = useState([GREETING]);
+  const [booted, setBooted] = useState(false); // 지난 대화 로딩 완료 여부
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(false); // 📌 기억 모드
   const endRef = useRef(null);
+
+  // ── [신규] 처음 켜질 때 지난 12시간 대화 불러오기 (새로고침해도 이어짐) ──
+  useEffect(() => {
+    fetch('/api/chat')
+      .then((r) => r.json())
+      .then((d) => {
+        const past = (d.messages || []).map((m) => ({ role: m.role, content: m.content }));
+        if (past.length > 0) setMessages([GREETING, ...past]);
+      })
+      .catch(() => {})
+      .finally(() => setBooted(true));
+  }, []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
   // 외부(리스크 분석 버튼 등)에서 질문이 들어오면 자동 전송
+  // booted 전에 보내면 로딩된 지난 대화와 충돌하므로 로딩 완료 후에만 전송
   useEffect(() => {
-    if (externalPrompt && !loading) {
+    if (externalPrompt && booted && !loading) {
       sendText(externalPrompt);
       onExternalConsumed && onExternalConsumed();
     }
     // eslint-disable-next-line
-  }, [externalPrompt]);
+  }, [externalPrompt, booted]);
 
   const sendText = async (text) => {
     const trimmed = (text || '').trim();
-    if (!trimmed || loading) return;
+    if (!trimmed || loading || !booted) return;
 
     const newMessages = [...messages, { role: 'user', content: trimmed }];
     setMessages(newMessages);
@@ -44,8 +60,9 @@ export default function Chat({ externalPrompt, onExternalConsumed, fullHeight, o
         body: JSON.stringify({
           message: trimmed,
           remember,
+          // 인사말(greeting)만 제외하고 실제 대화만 히스토리로 전송
           history: messages
-            .filter((m) => m.role !== 'assistant' || m.content !== messages[0].content)
+            .filter((m) => !m.greeting)
             .map((m) => ({ role: m.role, content: m.content })),
         }),
       });
@@ -73,9 +90,19 @@ export default function Chat({ externalPrompt, onExternalConsumed, fullHeight, o
         minHeight: 480,
       }}
     >
-      <div className="panel-title">🤖 AI 투자 분신</div>
+      <div className="panel-title">
+        🤖 AI 투자 분신
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-faint)' }}>
+          대화는 12시간 동안 유지돼요
+        </span>
+      </div>
 
       <div className="scroll" style={{ flex: 1, paddingRight: 4 }}>
+        {!booted && (
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', padding: '4px 2px' }}>
+            지난 대화 불러오는 중...
+          </div>
+        )}
         {messages.map((m, i) => (
           <div
             key={i}
@@ -151,7 +178,7 @@ export default function Chat({ externalPrompt, onExternalConsumed, fullHeight, o
         />
         <button
           onClick={() => sendText(input)}
-          disabled={loading}
+          disabled={loading || !booted}
           style={{
             padding: '10px 14px',
             background: 'var(--accent)',
@@ -160,7 +187,7 @@ export default function Chat({ externalPrompt, onExternalConsumed, fullHeight, o
             color: '#fff',
             fontSize: 13,
             fontWeight: 600,
-            opacity: loading ? 0.6 : 1,
+            opacity: loading || !booted ? 0.6 : 1,
           }}
         >
           전송
