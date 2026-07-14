@@ -1,14 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from '../../../lib/supabase';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+function getAnthropic() {
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+}
 
 // 저장된 설문 불러오기
 export async function GET() {
+  const supabase = getSupabase();
   const { data } = await supabase
     .from('investor_profile')
     .select('answers, summary')
@@ -21,6 +20,8 @@ export async function GET() {
 export async function POST(request) {
   try {
     const { answers } = await request.json();
+    const anthropic = getAnthropic();
+    const supabase = getSupabase();
 
     const answerText = Object.entries(answers)
       .map(([k, v]) => `${k}: ${v}`)

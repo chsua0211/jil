@@ -1,12 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from '../../../lib/supabase';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+function getAnthropic() {
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+}
 
 // 정베의 설문 답변을 사람이 읽을 수 있는 문장으로 변환
 function describeProfile(answers, summary) {
@@ -28,6 +25,8 @@ function extractTicker(text) {
 export async function POST(request) {
   try {
     const { message, history = [] } = await request.json();
+    const supabase = getSupabase();
+    const anthropic = getAnthropic();
 
     // 1) 정베 스타일 불러오기
     const { data: profile } = await supabase

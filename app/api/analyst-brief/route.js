@@ -1,11 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from '../../../lib/supabase';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+function getAnthropic() {
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+}
 
 // 종목 심볼을 받아서: 애널리스트 데이터 가져오기 → 정베 스타일로 해석
 export async function POST(request) {
@@ -27,6 +25,8 @@ export async function POST(request) {
     }
 
     // 2) 정베 스타일 불러오기
+    const supabase = getSupabase();
+    const anthropic = getAnthropic();
     const { data: profile } = await supabase
       .from('investor_profile')
       .select('answers, summary')
