@@ -8,13 +8,15 @@ import Portfolio from './Portfolio';
 import PerformanceChart from './PerformanceChart';
 import SurveyModal from './SurveyModal';
 import AnalystPanel from './AnalystPanel';
-import { IconHome, IconChat, IconBriefcase, IconStar, IconTune } from './icons';
+import Calendar from './Calendar';
+import { IconHome, IconChat, IconBriefcase, IconStar, IconCalendar, IconTune } from './icons';
 
 // 화면 목록 (런처 버블 + 안쪽 화면의 독에서 공용)
 const VIEWS = [
   { id: 'chat', Icon: IconChat, title: 'AI 채팅' },
   { id: 'portfolio', Icon: IconBriefcase, title: '포트폴리오' },
   { id: 'watch', Icon: IconStar, title: '관심종목·뉴스' },
+  { id: 'calendar', Icon: IconCalendar, title: '캘린더' },
 ];
 
 // 시간대별 인사말
@@ -72,11 +74,12 @@ function Clock() {
 }
 
 // 런처 버블 배치: 크기가 다른 원들이 살짝 닿을 정도로 촘촘하게 (비대칭 클러스터)
-// left/top은 360x316 컨테이너 기준 px
+// left/top은 390x300 컨테이너 기준 px
 const BUBBLES = [
-  { id: 'chat', size: 150, left: 105, top: 81, main: true, iconSize: 34 },
-  { id: 'portfolio', size: 116, left: 20, top: 16, iconSize: 26 },
-  { id: 'watch', size: 104, left: 238, top: 166, iconSize: 24 },
+  { id: 'chat', size: 150, left: 125, top: 95, main: true, iconSize: 34 },
+  { id: 'portfolio', size: 116, left: 40, top: 30, iconSize: 26 },
+  { id: 'watch', size: 104, left: 258, top: 180, iconSize: 24 },
+  { id: 'calendar', size: 96, left: 248, top: 36, iconSize: 22 },
 ];
 
 export default function Dashboard() {
@@ -158,7 +161,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bubble-field" style={{ position: 'relative', width: 360, height: 316 }}>
+          <div className="bubble-field" style={{ position: 'relative', width: 390, height: 300 }}>
             {BUBBLES.map((b) => {
               const view = VIEWS.find((v) => v.id === b.id);
               return (
@@ -178,11 +181,11 @@ export default function Dashboard() {
             {/* 앞으로 추가될 탭 자리 */}
             <div
               className="bubble bubble-ghost"
-              style={{ width: 76, height: 76, left: 172, top: 0 }}
+              style={{ width: 60, height: 60, left: 322, top: 130 }}
               title="앞으로 추가될 탭 자리"
               aria-hidden="true"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                 <path d="M12 5v14M5 12h14" />
               </svg>
             </div>
@@ -193,7 +196,7 @@ export default function Dashboard() {
               aria-label="성향 설정"
               title="성향 설정"
               className="bubble"
-              style={{ width: 64, height: 64, left: 56, top: 192 }}
+              style={{ width: 64, height: 64, left: 76, top: 230 }}
             >
               <IconTune width={18} height={18} />
             </button>
@@ -288,6 +291,9 @@ export default function Dashboard() {
           </p>
         </div>
       )}
+
+      {/* ── 캘린더 ── */}
+      {tab === 'calendar' && <Calendar />}
 
       {showSurvey && (
         <SurveyModal

@@ -109,6 +109,7 @@ export default function Portfolio({ refreshKey }) {
                 <th style={thStyle('right')}>수량</th>
                 <th style={thStyle('right')}>평단</th>
                 <th style={thStyle('right')}>현재가</th>
+                <th style={thStyle('right')}>일일</th>
                 <th style={thStyle('right')}>평가액</th>
                 <th style={thStyle('right')}>수익률</th>
                 <th style={thStyle('right')}>비중</th>
@@ -135,6 +136,9 @@ export default function Portfolio({ refreshKey }) {
                     <td style={tdR}>
                       {fmt2(h.price)}
                       <div style={subKrw}>{fmtKrw(h.price * rate)}</div>
+                    </td>
+                    <td style={tdR} className={(h.dayChangePct ?? 0) >= 0 ? 'up' : 'down'}>
+                      {(h.dayChangePct ?? 0) >= 0 ? '+' : ''}{(h.dayChangePct ?? 0).toFixed(2)}%
                     </td>
                     <td style={tdR}>
                       {fmt(h.value)}

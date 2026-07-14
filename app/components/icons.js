@@ -47,6 +47,14 @@ export const IconStar = (p) => (
   </svg>
 );
 
+export const IconCalendar = (p) => (
+  <svg {...base} {...p} aria-hidden="true">
+    <rect x="4" y="5" width="16" height="16" rx="2" />
+    <path d="M8 3v4M16 3v4M4 11h16" />
+    <path d="M9 15h2" />
+  </svg>
+);
+
 export const IconTune = (p) => (
   <svg {...base} {...p} aria-hidden="true">
     <path d="M4 6h10M18 6h2" />

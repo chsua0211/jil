@@ -67,6 +67,18 @@ create table if not exists portfolio_history (
   created_at timestamptz default now()
 );
 
+-- 8) 캘린더 일정 (AI가 뉴스에서 추출한 일정 + 실적 발표일 자동 수집)
+create table if not exists calendar_events (
+  id uuid primary key default gen_random_uuid(),
+  date date not null,
+  title text not null,
+  description text default '',
+  source text default 'ai',                 -- 'ai'(뉴스 추출) | 'earnings'(실적)
+  created_at timestamptz default now()
+);
+create unique index if not exists calendar_events_date_title_idx
+  on calendar_events (date, title);
+
 -- RLS 해제 (개인용 앱, 비밀번호 게이트로 보호)
 alter table investor_profile disable row level security;
 alter table portfolio disable row level security;
@@ -75,3 +87,4 @@ alter table saved_news disable row level security;
 alter table chat_messages disable row level security;
 alter table memories disable row level security;
 alter table portfolio_history disable row level security;
+alter table calendar_events disable row level security;
