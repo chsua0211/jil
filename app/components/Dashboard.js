@@ -9,7 +9,8 @@ import PerformanceChart from './PerformanceChart';
 import SurveyModal from './SurveyModal';
 import AnalystPanel from './AnalystPanel';
 import Calendar from './Calendar';
-import { IconHome, IconChat, IconBriefcase, IconStar, IconCalendar, IconTune } from './icons';
+import Reports from './Reports';
+import { IconHome, IconChat, IconBriefcase, IconStar, IconCalendar, IconReport, IconTune } from './icons';
 
 // 화면 목록 (런처 버블 + 안쪽 화면의 독에서 공용)
 const VIEWS = [
@@ -17,6 +18,7 @@ const VIEWS = [
   { id: 'portfolio', Icon: IconBriefcase, title: '포트폴리오' },
   { id: 'watch', Icon: IconStar, title: '관심종목·뉴스' },
   { id: 'calendar', Icon: IconCalendar, title: '캘린더' },
+  { id: 'reports', Icon: IconReport, title: '리포트' },
 ];
 
 // 시간대별 인사말
@@ -80,6 +82,7 @@ const BUBBLES = [
   { id: 'portfolio', size: 116, left: 40, top: 30, iconSize: 26 },
   { id: 'watch', size: 104, left: 258, top: 180, iconSize: 24 },
   { id: 'calendar', size: 96, left: 248, top: 36, iconSize: 22 },
+  { id: 'reports', size: 80, left: 308, top: 115, iconSize: 20 },
 ];
 
 export default function Dashboard() {
@@ -161,7 +164,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bubble-field" style={{ position: 'relative', width: 390, height: 300 }}>
+          <div className="bubble-field" style={{ position: 'relative', width: 390, height: 316 }}>
             {BUBBLES.map((b) => {
               const view = VIEWS.find((v) => v.id === b.id);
               return (
@@ -181,7 +184,7 @@ export default function Dashboard() {
             {/* 앞으로 추가될 탭 자리 */}
             <div
               className="bubble bubble-ghost"
-              style={{ width: 60, height: 60, left: 322, top: 130 }}
+              style={{ width: 60, height: 60, left: 155, top: 255 }}
               title="앞으로 추가될 탭 자리"
               aria-hidden="true"
             >
@@ -294,6 +297,9 @@ export default function Dashboard() {
 
       {/* ── 캘린더 ── */}
       {tab === 'calendar' && <Calendar />}
+
+      {/* ── 리포트 ── */}
+      {tab === 'reports' && <Reports />}
 
       {showSurvey && (
         <SurveyModal
