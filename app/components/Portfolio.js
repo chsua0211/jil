@@ -22,7 +22,7 @@ const fmtKrwShort = (n) => {
 };
 
 // 현황 보기 전용 패널. 종목 추가/수정/삭제는 채팅으로.
-export default function Portfolio({ onAskRisk, refreshKey }) {
+export default function Portfolio({ refreshKey }) {
   const [data, setData] = useState({ holdings: [], total: null, usdKrw: null });
   const [loading, setLoading] = useState(true);
   const [chartSymbol, setChartSymbol] = useState(null); // 클릭한 종목의 차트 모달
@@ -96,20 +96,6 @@ export default function Portfolio({ onAskRisk, refreshKey }) {
               ≈ {totalUp ? '+' : ''}{fmtKrwShort(t.pnl * rate)}
             </div>
           </div>
-          <button
-            onClick={onAskRisk}
-            style={{
-              padding: '9px 14px',
-              background: 'var(--accent)',
-              border: 'none',
-              borderRadius: 8,
-              color: '#fff',
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            🛡️ AI 리스크 분석
-          </button>
         </div>
       )}
 

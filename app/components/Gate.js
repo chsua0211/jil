@@ -6,6 +6,7 @@ export default function Gate({ onUnlock }) {
   const [pw, setPw] = useState('');
   const [err, setErr] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [remember, setRemember] = useState(false); // 이 기기에서 자동 로그인
 
   const submit = async () => {
     setLoading(true);
@@ -17,7 +18,7 @@ export default function Gate({ onUnlock }) {
     });
     const { ok } = await res.json();
     setLoading(false);
-    if (ok) onUnlock();
+    if (ok) onUnlock(remember);
     else setErr(true);
   };
 
@@ -60,6 +61,27 @@ export default function Gate({ onUnlock }) {
             비밀번호가 틀렸어요
           </p>
         )}
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            fontSize: 13,
+            color: 'var(--text-dim)',
+            marginBottom: 14,
+            cursor: 'pointer',
+            userSelect: 'none',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+            style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }}
+          />
+          이 기기에서 자동 로그인
+        </label>
         <button
           onClick={submit}
           disabled={loading}

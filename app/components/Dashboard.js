@@ -32,14 +32,6 @@ export default function Dashboard() {
 
   const refresh = () => setRefreshKey((k) => k + 1);
 
-  // 리스크 분석: 채팅으로 이동하면서 챗봇에 질문 전달
-  const askRisk = () => {
-    setTab('chat');
-    setChatPrompt(
-      '내 포트폴리오 리스크 분석해줘. 종목/섹터 쏠림, 수익률 상태, 내 손절 원칙 기준으로 위험한 종목 있는지, 그리고 개선 방향까지 알려줘.'
-    );
-  };
-
   // 원형 아이콘 버튼 스타일
   const circle = (active) => ({
     width: 48,
@@ -101,7 +93,7 @@ export default function Dashboard() {
         <div>
           <PerformanceChart refreshKey={refreshKey} />
           <div style={{ marginBottom: 12 }}>
-            <Portfolio refreshKey={refreshKey} onAskRisk={askRisk} />
+            <Portfolio refreshKey={refreshKey} />
           </div>
           <div
             className="grid-main"
@@ -135,7 +127,7 @@ export default function Dashboard() {
       {tab === 'portfolio' && (
         <div>
           <PerformanceChart refreshKey={refreshKey} />
-          <Portfolio refreshKey={refreshKey} onAskRisk={askRisk} />
+          <Portfolio refreshKey={refreshKey} />
           <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 10 }}>
             💡 종목 추가·수정·삭제는 채팅으로 해요. 예: &quot;엔비디아 10주 평단 150에 추가해줘&quot;,
             &quot;엔비디아에 1억 있어&quot;, &quot;테슬라 포트폴리오에서 빼줘&quot;
