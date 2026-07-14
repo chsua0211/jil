@@ -14,6 +14,7 @@ export default function NewsPanel() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null); // 팝업으로 보는 중인 기사
   const [scrapped, setScrapped] = useState({}); // url → true (중복 스크랩 방지)
+  const [article, setArticle] = useState(null); // 스크랩한 본문 { text, error }
 
   const load = () => {
     fetch('/api/news')
@@ -30,9 +31,16 @@ export default function NewsPanel() {
     return () => clearInterval(t);
   }, []);
 
-  // 기사 클릭 → 자동 스크랩 + 팝업 열기
+  // 기사 클릭 → 자동 스크랩 + 팝업 열기 (본문은 서버에서 텍스트만 긁어옴)
   const open = (n) => {
     setSelected(n);
+    setArticle(null);
+    if (n.url) {
+      fetch(`/api/article?url=${encodeURIComponent(n.url)}`)
+        .then((r) => r.json())
+        .then(setArticle)
+        .catch(() => setArticle({ text: '', error: '본문을 가져오지 못했어요.' }));
+    }
     if (n.url && !scrapped[n.url]) {
       setScrapped((s) => ({ ...s, [n.url]: true }));
       fetch('/api/data', {
@@ -166,23 +174,31 @@ export default function NewsPanel() {
               </div>
             )}
 
-            {/* 원문 임베드 시도 */}
+            {/* 스크랩한 본문 텍스트 */}
             <div
+              className="scroll"
               style={{
                 flex: 1,
                 border: '1px solid var(--border)',
                 borderRadius: 8,
-                overflow: 'hidden',
-                background: '#fff',
-                position: 'relative',
+                background: 'var(--panel-2)',
+                padding: '14px 18px',
+                overflowY: 'auto',
               }}
             >
-              <iframe
-                src={selected.url}
-                title={selected.headline}
-                style={{ width: '100%', height: '100%', border: 'none' }}
-                sandbox="allow-scripts allow-same-origin"
-              />
+              {!article && (
+                <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>본문 가져오는 중...</p>
+              )}
+              {article && article.text && (
+                <div style={{ fontSize: 14, lineHeight: 1.75, whiteSpace: 'pre-wrap' }}>
+                  {article.text}
+                </div>
+              )}
+              {article && !article.text && (
+                <p style={{ fontSize: 13, color: 'var(--text-faint)' }}>
+                  {article.error || '본문을 가져오지 못했어요.'}
+                </p>
+              )}
             </div>
 
             <div
@@ -194,7 +210,7 @@ export default function NewsPanel() {
               }}
             >
               <span style={{ fontSize: 11, color: 'var(--text-faint)', flex: 1 }}>
-                ⓘ 일부 언론사는 임베드를 차단해서 위 화면이 비어 보일 수 있어요. 그럴 땐 원문 버튼을 눌러 주세요.
+                ⓘ 원문에서 텍스트만 가져온 거라 사진·표는 빠져 있어요.
               </span>
               <a
                 href={selected.url}
