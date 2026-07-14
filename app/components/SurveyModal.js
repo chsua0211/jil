@@ -38,12 +38,18 @@ export default function SurveyModal({ onClose, onSaved }) {
 
   const save = async () => {
     setSaving(true);
-    await fetch('/api/profile', {
+    const res = await fetch('/api/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ answers }),
     });
+    let result = {};
+    try { result = await res.json(); } catch {}
     setSaving(false);
+    if (!res.ok || result.ok === false) {
+      alert('저장에 실패했어요: ' + (result.error || `서버 오류 (${res.status})`));
+      return;
+    }
     onSaved();
   };
 
