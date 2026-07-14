@@ -92,7 +92,7 @@ export default function Watchlist({ onChange }) {
 
       {items.length === 0 && (
         <p style={{ fontSize: 12, color: 'var(--text-faint)' }}>
-          관심 종목을 추가해봐
+          관심 종목을 추가해 보세요
         </p>
       )}
 

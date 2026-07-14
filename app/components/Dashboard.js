@@ -46,7 +46,7 @@ export default function Dashboard() {
             📈
           </div>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700 }}>정베의 투자 브리핑</div>
+            <div style={{ fontSize: 17, fontWeight: 700 }}>정일님의 투자 브리핑</div>
             <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>미국장 · 실시간</div>
           </div>
         </div>
@@ -83,7 +83,7 @@ export default function Dashboard() {
         >
           <span style={{ fontSize: 18 }}>👋</span>
           <span style={{ fontSize: 14 }}>
-            먼저 성향 설문을 채워줘. 그래야 AI가 <b>정베처럼</b> 분석해줘!
+            먼저 성향 설문을 채워 주세요. 그래야 AI가 <b>정일님 스타일로</b> 분석해 드려요!
           </span>
         </div>
       )}

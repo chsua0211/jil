@@ -71,7 +71,7 @@ export default function AnalystPanel() {
 
       {loading && (
         <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>
-          애널리스트 데이터 가져와서 정베 스타일로 해석 중...
+          애널리스트 데이터 가져와서 정일님 스타일로 해석 중이에요...
         </p>
       )}
 
@@ -188,7 +188,7 @@ export default function AnalystPanel() {
             </div>
           )}
 
-          {/* 정베 스타일 해석 */}
+          {/* 정일님 스타일 해석 */}
           {result.brief && (
             <div
               style={{
@@ -206,7 +206,7 @@ export default function AnalystPanel() {
                   marginBottom: 8,
                 }}
               >
-                🤖 정베 관점 분석
+                🤖 정일님 관점 분석
               </div>
               <div style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                 {result.brief}

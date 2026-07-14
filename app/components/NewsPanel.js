@@ -37,7 +37,7 @@ export default function NewsPanel() {
         payload: { headline: n.headline, url: n.url, source: n.source, symbol: n.symbol },
       }),
     });
-    alert('스크랩했어!');
+    alert('스크랩했어요!');
   };
 
   return (

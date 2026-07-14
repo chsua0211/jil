@@ -6,7 +6,7 @@ export default function Chat() {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: '안녕 정베! 궁금한 종목이나 시장 얘기 물어봐. 최신 정보 찾아서 네 스타일대로 분석해줄게.',
+      content: '안녕하세요 정일님! 궁금한 종목이나 시장 얘기 물어봐 주세요. 최신 정보를 찾아서 정일님 스타일대로 분석해 드릴게요.',
     },
   ]);
   const [input, setInput] = useState('');
@@ -40,10 +40,10 @@ export default function Chat() {
       const { reply, error } = await res.json();
       setMessages([
         ...newMessages,
-        { role: 'assistant', content: reply || `문제가 생겼어: ${error || '알 수 없음'}` },
+        { role: 'assistant', content: reply || `문제가 생겼어요: ${error || '알 수 없음'}` },
       ]);
     } catch (e) {
-      setMessages([...newMessages, { role: 'assistant', content: '연결에 문제가 생겼어. 다시 시도해줘.' }]);
+      setMessages([...newMessages, { role: 'assistant', content: '연결에 문제가 생겼어요. 다시 시도해 주세요.' }]);
     }
     setLoading(false);
   };
@@ -80,7 +80,7 @@ export default function Chat() {
         ))}
         {loading && (
           <div style={{ fontSize: 12, color: 'var(--text-dim)', padding: '4px 2px' }}>
-            분석 중... (최신 정보 찾는 중일 수 있어)
+            분석 중이에요... (최신 정보 찾는 중일 수 있어요)
           </div>
         )}
         <div ref={endRef} />
@@ -99,7 +99,7 @@ export default function Chat() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
-          placeholder="예: 엔비디아 지금 어때?"
+          placeholder="예: 엔비디아 지금 어떤가요?"
           style={{
             flex: 1,
             padding: '10px 12px',

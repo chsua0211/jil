@@ -47,7 +47,7 @@ export default function SurveyModal({ onClose, onSaved }) {
         style={{ width: 560, maxWidth: '100%', maxHeight: '88vh', padding: 24 }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-          <h2 style={{ fontSize: 18 }}>🧠 정베 투자 성향</h2>
+          <h2 style={{ fontSize: 18 }}>🧠 정일님 투자 성향</h2>
           <button
             onClick={onClose}
             style={{ background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 20 }}
@@ -56,7 +56,7 @@ export default function SurveyModal({ onClose, onSaved }) {
           </button>
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 20 }}>
-          답할수록 AI가 더 정베처럼 분석해. 언제든 다시 고칠 수 있어.
+          답하실수록 AI가 더 정일님 스타일로 분석해 드려요. 언제든 다시 고치실 수 있어요.
         </p>
 
         {SURVEY.map((sec) => (

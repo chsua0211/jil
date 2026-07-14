@@ -33,9 +33,9 @@ export default function Gate({ onUnlock }) {
     >
       <div className="panel" style={{ width: 340, textAlign: 'center', padding: 32 }}>
         <div style={{ fontSize: 28, marginBottom: 6 }}>📈</div>
-        <h1 style={{ fontSize: 20, marginBottom: 4 }}>정베의 투자 브리핑</h1>
+        <h1 style={{ fontSize: 20, marginBottom: 4 }}>정일님의 투자 브리핑</h1>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 24 }}>
-          너의 투자 분신이 기다리고 있어
+          정일님의 투자 분신이 기다리고 있어요
         </p>
         <input
           type="password"
@@ -57,7 +57,7 @@ export default function Gate({ onUnlock }) {
         />
         {err && (
           <p style={{ color: 'var(--down)', fontSize: 12, marginBottom: 12 }}>
-            비밀번호가 틀렸어
+            비밀번호가 틀렸어요
           </p>
         )}
         <button
