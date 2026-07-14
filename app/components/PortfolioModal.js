@@ -33,7 +33,7 @@ export default function PortfolioModal({ onClose, onSaved }) {
   }, []);
 
   const add = async () => {
-    if (!symbol.trim() || !shares || !avgCost || adding) return;
+    if (!symbol.trim() || !shares || adding) return;
     setAdding(true);
     const res = await fetch('/api/portfolio', {
       method: 'POST',
@@ -159,7 +159,7 @@ export default function PortfolioModal({ onClose, onSaved }) {
               value={avgCost}
               onChange={(e) => setAvgCost(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && add()}
-              placeholder="평단가 ($)"
+              placeholder="평단가 (비우면 현재가)"
               type="number"
               min="0"
               step="any"

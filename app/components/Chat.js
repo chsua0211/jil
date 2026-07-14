@@ -7,7 +7,7 @@ export default function Chat({ externalPrompt, onExternalConsumed, fullHeight, o
     {
       role: 'assistant',
       content:
-        '안녕하세요 정일님! 궁금한 종목이나 시장 얘기 물어봐 주세요. 포트폴리오 기반으로 분석해 드려요.\n\n말로 관리도 가능해요:\n· "엔비디아 10주 평단 150에 추가해줘"\n· "테슬라 관심종목에 넣어줘"\n· "내 포트폴리오 리스크 분석해줘"',
+        '안녕하세요 정일님! 궁금한 종목이나 시장 얘기 물어봐 주세요. 포트폴리오 기반으로 분석해 드려요.\n\n말로 관리도 가능해요:\n· "엔비디아에 1억 있어" → 오늘 주가로 주 수 자동 계산해서 등록\n· "테슬라 관심종목에 넣어줘"\n· "내 포트폴리오 리스크 분석해줘"',
     },
   ]);
   const [input, setInput] = useState('');

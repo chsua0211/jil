@@ -75,16 +75,37 @@ export async function GET() {
 export async function POST(request) {
   const supabase = getSupabase();
   const { symbol, shares, avgCost } = await request.json();
-  if (!symbol || !shares || !avgCost) {
-    return Response.json({ ok: false, error: '종목, 수량, 평단가를 모두 입력해 주세요.' }, { status: 400 });
+  if (!symbol || !shares) {
+    return Response.json({ ok: false, error: '종목과 수량을 입력해 주세요.' }, { status: 400 });
   }
+  const sym = symbol.toUpperCase().trim();
+
+  // 실존 티커 검증 겸 현재가 조회
+  let price = 0;
+  try {
+    const res = await fetch(
+      `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${process.env.FINNHUB_API_KEY}`
+    );
+    const q = await res.json();
+    price = q.c || 0;
+  } catch {}
+  if (!price) {
+    return Response.json(
+      { ok: false, error: `${sym}은(는) 존재하지 않는 티커이거나 시세를 찾을 수 없어요. 다시 확인해 주세요.` },
+      { status: 400 }
+    );
+  }
+
+  // 평단가 비우면 오늘 현재가로 자동 기록 (대략치)
+  const cost = avgCost ? Number(avgCost) : price;
+
   const { error } = await supabase.from('portfolio').insert({
-    symbol: symbol.toUpperCase().trim(),
+    symbol: sym,
     shares: Number(shares),
-    avg_cost: Number(avgCost),
+    avg_cost: cost,
   });
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
-  return Response.json({ ok: true });
+  return Response.json({ ok: true, usedCurrentPrice: !avgCost, price });
 }
 
 // 종목 수정: { id, shares, avgCost }
