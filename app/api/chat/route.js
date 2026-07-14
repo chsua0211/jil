@@ -24,10 +24,106 @@ function describeProfile(answers, summary) {
   return text;
 }
 
-// 메시지에서 티커로 보이는 대문자 1~5글자 단어를 뽑아냄 (예: NVDA, TSLA)
-function extractTicker(text) {
-  const m = text.match(/\b[A-Z]{1,5}\b/g);
-  return m ? m[0] : null;
+// ── 챗봇이 쓸 수 있는 도구들 (포트폴리오/관심종목 조작) ──
+const CUSTOM_TOOLS = [
+  {
+    name: 'portfolio_add',
+    description: '정일님의 포트폴리오에 보유 종목을 추가합니다. 티커, 수량, 평단가(USD)가 모두 필요합니다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', description: '종목 티커 (예: NVDA)' },
+        shares: { type: 'number', description: '보유 수량' },
+        avg_cost: { type: 'number', description: '평단가 (USD)' },
+      },
+      required: ['symbol', 'shares', 'avg_cost'],
+    },
+  },
+  {
+    name: 'portfolio_update',
+    description: '포트폴리오의 기존 종목 수량이나 평단가를 수정합니다. 티커로 종목을 찾습니다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', description: '수정할 종목 티커' },
+        shares: { type: 'number', description: '새 수량 (변경 시)' },
+        avg_cost: { type: 'number', description: '새 평단가 (변경 시)' },
+      },
+      required: ['symbol'],
+    },
+  },
+  {
+    name: 'portfolio_remove',
+    description: '포트폴리오에서 종목을 삭제합니다.',
+    input_schema: {
+      type: 'object',
+      properties: { symbol: { type: 'string', description: '삭제할 종목 티커' } },
+      required: ['symbol'],
+    },
+  },
+  {
+    name: 'watchlist_add',
+    description: '관심종목 목록에 종목을 추가합니다.',
+    input_schema: {
+      type: 'object',
+      properties: { symbol: { type: 'string', description: '추가할 종목 티커' } },
+      required: ['symbol'],
+    },
+  },
+  {
+    name: 'watchlist_remove',
+    description: '관심종목 목록에서 종목을 삭제합니다.',
+    input_schema: {
+      type: 'object',
+      properties: { symbol: { type: 'string', description: '삭제할 종목 티커' } },
+      required: ['symbol'],
+    },
+  },
+];
+
+// 도구 실행기: Claude가 도구를 쓰겠다고 하면 실제 DB 조작을 수행
+async function executeTool(supabase, name, input) {
+  const sym = (input.symbol || '').toUpperCase().trim();
+  try {
+    if (name === 'portfolio_add') {
+      const { error } = await supabase.from('portfolio').insert({
+        symbol: sym,
+        shares: Number(input.shares),
+        avg_cost: Number(input.avg_cost),
+      });
+      if (error) return { ok: false, error: error.message };
+      return { ok: true, message: `${sym} ${input.shares}주(평단 $${input.avg_cost}) 추가됨` };
+    }
+    if (name === 'portfolio_update') {
+      const { data: rows } = await supabase.from('portfolio').select('*').eq('symbol', sym).limit(1);
+      if (!rows || rows.length === 0) return { ok: false, error: `포트폴리오에 ${sym}이(가) 없습니다.` };
+      const patch = {};
+      if (input.shares !== undefined) patch.shares = Number(input.shares);
+      if (input.avg_cost !== undefined) patch.avg_cost = Number(input.avg_cost);
+      if (Object.keys(patch).length === 0) return { ok: false, error: '변경할 값이 없습니다.' };
+      const { error } = await supabase.from('portfolio').update(patch).eq('id', rows[0].id);
+      if (error) return { ok: false, error: error.message };
+      return { ok: true, message: `${sym} 수정됨` };
+    }
+    if (name === 'portfolio_remove') {
+      const { error } = await supabase.from('portfolio').delete().eq('symbol', sym);
+      if (error) return { ok: false, error: error.message };
+      return { ok: true, message: `${sym} 포트폴리오에서 삭제됨` };
+    }
+    if (name === 'watchlist_add') {
+      const { error } = await supabase.from('watchlist').insert({ symbol: sym });
+      if (error) return { ok: false, error: error.message };
+      return { ok: true, message: `${sym} 관심종목에 추가됨` };
+    }
+    if (name === 'watchlist_remove') {
+      const { error } = await supabase.from('watchlist').delete().eq('symbol', sym);
+      if (error) return { ok: false, error: error.message };
+      return { ok: true, message: `${sym} 관심종목에서 삭제됨` };
+    }
+    return { ok: false, error: '알 수 없는 도구' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 }
 
 export async function POST(request) {
@@ -45,7 +141,7 @@ export async function POST(request) {
 
     const profileText = describeProfile(profile?.answers, profile?.summary);
 
-    // 1-1) 정일님 포트폴리오 불러오기 (실시간 평가 포함) — 매 대화마다 AI가 포트폴리오를 알고 답함
+    // 1-1) 포트폴리오 (실시간 평가 포함)
     let portfolioText = '아직 포트폴리오가 입력되지 않았습니다.';
     try {
       const origin = new URL(request.url).origin;
@@ -63,71 +159,83 @@ export async function POST(request) {
       }
     } catch {}
 
-    // 1-2) 메시지에 티커가 있고 애널리스트 관련 질문이면 데이터 미리 가져오기
-    let analystContext = '';
-    const ticker = extractTicker(message);
-    const wantsAnalyst = /애널리스트|목표주가|투자의견|리포트|상향|하향|목표가/.test(message);
-    if (ticker && wantsAnalyst) {
-      try {
-        const origin = new URL(request.url).origin;
-        const aRes = await fetch(`${origin}/api/analyst?symbol=${ticker}`);
-        const a = await aRes.json();
-        if (a.recommendation || a.priceTarget) {
-          analystContext = `\n\n[참고: ${ticker} 애널리스트 데이터]\n`;
-          if (a.priceTarget) analystContext += `목표주가 평균 $${a.priceTarget.mean} (최고 $${a.priceTarget.high}, 최저 $${a.priceTarget.low})\n`;
-          if (a.recommendation) {
-            const r = a.recommendation;
-            analystContext += `투자의견: 강력매수 ${r.strongBuy}, 매수 ${r.buy}, 보유 ${r.hold}, 매도 ${r.sell}, 강력매도 ${r.strongSell}\n`;
-          }
-          if (a.changes?.length) {
-            analystContext += '최근 변경: ' + a.changes.map((c) => `${c.company} ${c.to}(${c.action})`).join(', ');
-          }
-        }
-      } catch {}
-    }
+    // 1-2) 관심종목 목록
+    let watchlistText = '관심종목 없음';
+    try {
+      const { data: wl } = await supabase.from('watchlist').select('symbol').order('created_at');
+      if (wl && wl.length > 0) watchlistText = wl.map((w) => w.symbol).join(', ');
+    } catch {}
 
-    // 2) 시스템 프롬프트: 여기가 투자 분신의 핵심
+    // 2) 시스템 프롬프트
     const system = `당신은 '정일님'의 개인 투자 파트너 AI입니다. 단순히 정보를 검색해주는 봇이 아니라, 정일님의 포트폴리오와 성향을 모두 알고 있는 자산관리 파트너처럼 행동합니다.
 
 ${profileText}
 
 ${portfolioText}
 
+[관심종목] ${watchlistText}
+
 규칙:
 - 사용자는 항상 '정일님'이라고 부릅니다. '정베' 같은 다른 호칭은 절대 쓰지 않습니다.
 - 항상 정중한 존댓말로 답합니다.
-- 모든 조언은 정일님의 실제 포트폴리오를 기준으로 합니다. 예: 어떤 종목 이야기가 나오면 정일님이 그 종목을 보유 중인지, 수익률이 어떤지, 비중이 얼마인지 먼저 확인하고 그에 맞게 답합니다.
-- 정일님의 성향(손절 원칙, 위험 태도 등)과 실제 수익률을 연결해서 조언합니다. 예: 손절 원칙이 -10%인데 어떤 종목이 -12%면 그 사실을 짚어줍니다.
-- 리스크 분석 시 구체적으로: 특정 종목/섹터 쏠림(비중 30% 이상이면 집중 리스크 언급), 전체 손익 상태, 변동성 큰 종목 여부 등을 포트폴리오 숫자에 근거해 설명합니다.
-- 최신 정보가 필요하면 web_search 도구로 직접 찾아봅니다. 뉴스, 실적, 주가 흐름 등.
+- 모든 조언은 정일님의 실제 포트폴리오를 기준으로 합니다.
+- 정일님의 성향(손절 원칙, 위험 태도 등)과 실제 수익률을 연결해서 조언합니다.
+- 리스크 분석 시 구체적으로: 종목/섹터 쏠림(비중 30% 이상이면 집중 리스크 언급), 전체 손익 상태, 변동성 등을 숫자에 근거해 설명합니다.
+- 정일님이 포트폴리오나 관심종목의 추가/수정/삭제를 요청하시면 도구(portfolio_add, portfolio_update, portfolio_remove, watchlist_add, watchlist_remove)를 사용해서 실제로 반영합니다. 반영 후 결과를 확인해 드립니다.
+- 포트폴리오 추가는 티커·수량·평단가가 모두 필요합니다. 빠진 정보가 있으면 물어보세요.
+- 최신 정보가 필요하면 web_search 도구로 직접 찾아봅니다.
 - 딱딱한 애널리스트 말투보다는 친근하면서도 정중하게. 근거는 확실하게 제시합니다.
 - 투자 조언은 참고용이고 최종 판단은 정일님 몫이라는 점을 자연스럽게 안내합니다.
-- 확실하지 않은 건 솔직하게 모른다고 말합니다. 없는 숫자를 지어내지 않습니다. 위 포트폴리오 숫자는 실시간 데이터이므로 그대로 신뢰하고 사용합니다.`;
+- 확실하지 않은 건 솔직하게 모른다고 말합니다. 없는 숫자를 지어내지 않습니다.`;
 
-    // 3) Claude 호출. 웹 검색 도구를 먼저 시도하고, 안 되면 검색 없이 다시 답한다.
-    const userContent = message + analystContext;
-    const messages = [...history, { role: 'user', content: userContent }];
+    // 3) Claude 호출 + 도구 사용 루프
+    let messages = [...history, { role: 'user', content: message }];
+    let toolsUsed = false;
 
-    let response;
-    try {
-      // 웹 검색 도구 포함 시도
-      response = await anthropic.messages.create({
+    // 웹검색 사용 가능 여부에 따라 도구 구성 (안 되면 커스텀 도구만)
+    const callClaude = async (msgs, includeWebSearch) => {
+      const tools = includeWebSearch
+        ? [{ type: 'web_search_20250305', name: 'web_search' }, ...CUSTOM_TOOLS]
+        : CUSTOM_TOOLS;
+      return anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 1500,
         system,
-        messages,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: msgs,
+        tools,
       });
-    } catch (searchErr) {
-      // 웹 검색이 아직 활성화 안 됐거나 문제가 있으면, 검색 없이 답한다.
-      response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1500,
-        system:
-          system +
-          '\n\n(참고: 지금은 실시간 웹 검색을 쓸 수 없어요. 알고 있는 지식과 주어진 데이터만으로 답하고, 최신 정보가 필요한 부분은 확실하지 않을 수 있다고 안내해 주세요.)',
-        messages,
-      });
+    };
+
+    let useWebSearch = true;
+    let response;
+    try {
+      response = await callClaude(messages, true);
+    } catch {
+      useWebSearch = false;
+      response = await callClaude(messages, false);
+    }
+
+    // 도구 사용 루프 (최대 5회)
+    let iterations = 0;
+    while (response.stop_reason === 'tool_use' && iterations < 5) {
+      iterations++;
+      messages = [...messages, { role: 'assistant', content: response.content }];
+
+      const toolResults = [];
+      for (const block of response.content) {
+        if (block.type === 'tool_use') {
+          toolsUsed = true;
+          const result = await executeTool(supabase, block.name, block.input);
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: block.id,
+            content: JSON.stringify(result),
+          });
+        }
+      }
+
+      messages = [...messages, { role: 'user', content: toolResults }];
+      response = await callClaude(messages, useWebSearch);
     }
 
     // 4) 텍스트 응답만 추출
@@ -143,7 +251,7 @@ ${portfolioText}
       { role: 'assistant', content: reply },
     ]).then(() => {}, () => {});
 
-    return Response.json({ reply });
+    return Response.json({ reply, toolsUsed });
   } catch (e) {
     return Response.json({ reply: '', error: e.message }, { status: 500 });
   }

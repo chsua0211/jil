@@ -2,11 +2,12 @@
 
 import { useState, useRef, useEffect } from 'react';
 
-export default function Chat({ externalPrompt, onExternalConsumed }) {
+export default function Chat({ externalPrompt, onExternalConsumed, fullHeight, onDataChanged }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: '안녕하세요 정일님! 궁금한 종목이나 시장 얘기 물어봐 주세요. 최신 정보를 찾아서 정일님 스타일대로 분석해 드릴게요.',
+      content:
+        '안녕하세요 정일님! 궁금한 종목이나 시장 얘기 물어봐 주세요. 포트폴리오 기반으로 분석해 드려요.\n\n말로 관리도 가능해요:\n· "엔비디아 10주 평단 150에 추가해줘"\n· "테슬라 관심종목에 넣어줘"\n· "내 포트폴리오 리스크 분석해줘"',
     },
   ]);
   const [input, setInput] = useState('');
@@ -46,11 +47,13 @@ export default function Chat({ externalPrompt, onExternalConsumed }) {
             .map((m) => ({ role: m.role, content: m.content })),
         }),
       });
-      const { reply, error } = await res.json();
+      const { reply, error, toolsUsed } = await res.json();
       setMessages([
         ...newMessages,
         { role: 'assistant', content: reply || `문제가 생겼어요: ${error || '알 수 없음'}` },
       ]);
+      // AI가 포트폴리오/관심종목을 수정했으면 다른 화면도 갱신
+      if (toolsUsed && onDataChanged) onDataChanged();
     } catch (e) {
       setMessages([...newMessages, { role: 'assistant', content: '연결에 문제가 생겼어요. 다시 시도해 주세요.' }]);
     }
@@ -58,7 +61,15 @@ export default function Chat({ externalPrompt, onExternalConsumed }) {
   };
 
   return (
-    <div className="panel" style={{ display: 'flex', flexDirection: 'column', height: 620 }}>
+    <div
+      className="panel"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: fullHeight ? 'calc(100vh - 110px)' : 620,
+        minHeight: 480,
+      }}
+    >
       <div className="panel-title">🤖 AI 투자 분신</div>
 
       <div className="scroll" style={{ flex: 1, paddingRight: 4 }}>
