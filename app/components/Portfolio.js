@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import StockChartModal from './StockChartModal';
 
 const fmt = (n) => '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
 const fmt2 = (n) => '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -24,6 +25,7 @@ const fmtKrwShort = (n) => {
 export default function Portfolio({ onAskRisk, refreshKey }) {
   const [data, setData] = useState({ holdings: [], total: null, usdKrw: null });
   const [loading, setLoading] = useState(true);
+  const [chartSymbol, setChartSymbol] = useState(null); // 클릭한 종목의 차트 모달
 
   const load = () => {
     fetch('/api/portfolio')
@@ -130,8 +132,15 @@ export default function Portfolio({ onAskRisk, refreshKey }) {
               {data.holdings.map((h) => {
                 const up = h.pnlPct >= 0;
                 return (
-                  <tr key={h.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td style={{ padding: '9px 4px', fontWeight: 600 }}>{h.symbol}</td>
+                  <tr
+                    key={h.id}
+                    onClick={() => setChartSymbol(h.symbol)}
+                    title="클릭하면 차트를 볼 수 있어요"
+                    style={{ borderTop: '1px solid var(--border)', cursor: 'pointer' }}
+                  >
+                    <td style={{ padding: '9px 4px', fontWeight: 600 }}>
+                      {h.symbol} <span style={{ fontSize: 10, color: 'var(--text-faint)', fontWeight: 400 }}>📊</span>
+                    </td>
                     <td style={tdR}>{h.shares}</td>
                     <td style={tdR}>
                       {fmt2(h.avgCost)}
@@ -155,6 +164,10 @@ export default function Portfolio({ onAskRisk, refreshKey }) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {chartSymbol && (
+        <StockChartModal symbol={chartSymbol} onClose={() => setChartSymbol(null)} />
       )}
     </div>
   );

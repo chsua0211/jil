@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import StockChartModal from './StockChartModal';
 
 export default function Watchlist({ onChange }) {
   const [items, setItems] = useState([]);
   const [quotes, setQuotes] = useState({});
   const [input, setInput] = useState('');
+  const [chartSymbol, setChartSymbol] = useState(null); // 클릭한 종목의 차트 모달
 
   const loadList = async () => {
     const res = await fetch('/api/data');
@@ -102,18 +104,21 @@ export default function Watchlist({ onChange }) {
         return (
           <div
             key={it.id}
+            onClick={() => setChartSymbol(it.symbol)}
+            title="클릭하면 차트를 볼 수 있어요"
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '9px 0',
               borderBottom: '1px solid var(--border)',
+              cursor: 'pointer',
             }}
           >
             <div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{it.symbol}</div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{it.symbol} <span style={{ fontSize: 10, color: 'var(--text-faint)', fontWeight: 400 }}>📊</span></div>
               <button
-                onClick={() => remove(it.id)}
+                onClick={(e) => { e.stopPropagation(); remove(it.id); }}
                 style={{
                   fontSize: 10,
                   background: 'none',
@@ -136,6 +141,10 @@ export default function Watchlist({ onChange }) {
           </div>
         );
       })}
+
+      {chartSymbol && (
+        <StockChartModal symbol={chartSymbol} onClose={() => setChartSymbol(null)} />
+      )}
     </div>
   );
 }

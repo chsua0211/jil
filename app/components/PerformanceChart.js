@@ -29,7 +29,6 @@ const LINE_META = {
 export default function PerformanceChart({ refreshKey }) {
   const [days, setDays] = useState(90);
   const [points, setPoints] = useState([]);
-  const [excluded, setExcluded] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -40,7 +39,6 @@ export default function PerformanceChart({ refreshKey }) {
       .then((r) => r.json())
       .then((d) => {
         setPoints(d.points || []);
-        setExcluded(d.excluded || []);
         if (d.error) setError(d.error);
       })
       .catch(() => setError('차트 데이터를 불러오지 못했어요.'))
@@ -162,8 +160,8 @@ export default function PerformanceChart({ refreshKey }) {
           </div>
 
           <p style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8 }}>
-            ⓘ 현재 보유 종목·수량을 기간 내내 그대로 들고 있었다고 가정한 지수예요 (매매 시점 미반영).
-            {excluded.length > 0 && ` 시세를 못 찾은 종목은 제외됨: ${excluded.join(', ')}`}
+            ⓘ 매일 실제 평가액이 기록되고 매수·매도도 반영되는 지수예요. 돈을 새로 넣거나 빼서
+            평가액이 변한 건 수익률로 치지 않아요 (시간가중수익률).
           </p>
         </>
       )}

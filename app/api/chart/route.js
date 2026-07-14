@@ -1,17 +1,18 @@
 import { getSupabase } from '../../../lib/supabase';
+import { recordValueSnapshot } from '../../../lib/snapshot';
 
 // ─────────────────────────────────────────────────────────────
-// 성과 비교 차트 데이터: 내 포트폴리오 지수 vs S&P500 선물 vs 나스닥 선물
+// 성과 비교 차트: 내 포트폴리오 vs S&P500 선물 vs 나스닥 선물
 // GET /api/chart?days=90
 //
-// 데이터 소스: Yahoo Finance (메인) → 실패 시 Stooq (폴백)
-//  * Stooq는 일일 요청 한도가 낮아서 서버(Vercel)에서 자주 막힘
-//  * Yahoo는 키 없이 사용 가능하고 한도가 훨씬 널널함
+// 내 포트폴리오 선은 portfolio_history에 매일 쌓이는 실제 기록으로 그린다.
+//  - 차트를 열 때마다 오늘 평가액이 자동 기록됨
+//  - 매수/매도 금액(flow)은 매매 시점에 기록됨
+//  - 수익률은 시간가중수익률: 돈을 새로 넣거나 뺀 것은 수익으로 치지 않음
+//    일수익률 r = (오늘 평가액 - 오늘 매매금액) / 어제 평가액
 //
-// 과거 포트폴리오 평가액 기록이 없으므로,
-// "현재 보유 종목·수량을 과거에도 그대로 들고 있었다면"을 가정하고
-// 각 종목의 과거 일별 종가로 합산 지수를 역산함.
-// 세 지수 모두 시작일 = 100으로 정규화해서 수익률 비교가 바로 보이게 함.
+// 벤치마크(선물)는 Yahoo Finance (실패 시 Stooq 폴백)에서 과거 종가를 가져옴.
+// 세 지수 모두 구간 시작일 = 100으로 정규화.
 // ─────────────────────────────────────────────────────────────
 
 export const dynamic = 'force-dynamic';
@@ -22,8 +23,7 @@ const YAHOO_HEADERS = {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
 };
 
-// ── 소스 1: Yahoo Finance ──
-// 반환: { 'YYYY-MM-DD': close, ... } 또는 null
+// ── 소스 1: Yahoo Finance ── 반환: { 'YYYY-MM-DD': close, ... } 또는 null
 async function fetchYahooCloses(yahooSymbol, fromDate) {
   try {
     const period1 = Math.floor(new Date(fromDate).getTime() / 1000);
@@ -60,7 +60,6 @@ async function fetchStooqCloses(stooqSymbol, fromDate) {
     const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSymbol)}&d1=${d1}&d2=${d2}&i=d`;
     const res = await fetch(url, { next: { revalidate: 3600 } });
     const text = await res.text();
-    // 한도 초과 시 CSV 대신 안내 문구가 옴 → 첫 줄이 Date로 시작하는지 확인
     if (!text.startsWith('Date')) return null;
     const lines = text.trim().split('\n');
     if (lines.length < 2) return null;
@@ -77,108 +76,125 @@ async function fetchStooqCloses(stooqSymbol, fromDate) {
   }
 }
 
-// Yahoo 먼저, 안 되면 Stooq
 async function fetchCloses({ yahoo, stooq }, fromDate) {
   const fromYahoo = await fetchYahooCloses(yahoo, fromDate);
   if (fromYahoo) return fromYahoo;
   return fetchStooqCloses(stooq, fromDate);
 }
 
+// 해당 날짜 또는 그 이전의 가장 가까운 종가 (주말·휴장일 대비)
+function closeOnOrBefore(closeMap, sortedDates, date) {
+  let found = null;
+  for (const d of sortedDates) {
+    if (d > date) break;
+    found = closeMap[d];
+  }
+  return found;
+}
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const days = Math.min(365, Math.max(7, Number(searchParams.get('days')) || 90));
-    const fromDate = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
 
-    // 1) 보유 종목
+    // 0) 오늘 평가액을 기록 (기록이 매일 쌓이는 핵심 지점)
+    await recordValueSnapshot();
+
+    // 1) 지금까지 쌓인 스냅샷 전체 (지수는 처음부터 이어 계산해야 정확함)
     const supabase = getSupabase();
-    const { data: holdings } = await supabase.from('portfolio').select('symbol, shares');
-    if (!holdings || holdings.length === 0) {
-      return Response.json({ points: [], excluded: [], error: '포트폴리오가 비어 있어요.' });
+    const { data: rows } = await supabase
+      .from('portfolio_history')
+      .select('date, value, flow')
+      .order('date');
+
+    // 시세 조회 실패로 value가 비어 있는 날은 건너뛰되, 그날의 매매금액은 다음 날로 이월
+    const chain = [];
+    let pendingFlow = 0;
+    for (const row of rows || []) {
+      const flow = Number(row.flow || 0) + pendingFlow;
+      if (row.value === null || row.value === undefined) {
+        pendingFlow = flow;
+        continue;
+      }
+      pendingFlow = 0;
+      chain.push({ date: row.date, value: Number(row.value), flow });
     }
 
-    // 같은 티커 여러 줄이면 수량 합산
-    const shareMap = {};
-    for (const h of holdings) {
-      const sym = h.symbol.toUpperCase();
-      shareMap[sym] = (shareMap[sym] || 0) + Number(h.shares);
+    if (chain.length < 2) {
+      return Response.json({
+        points: [],
+        error:
+          '아직 기록이 쌓이는 중이에요. 오늘부터 매일 포트폴리오 평가액이 기록되고, 매매도 반영돼요. 내일부터 그래프가 보이기 시작합니다!',
+      });
     }
-    const symbols = Object.keys(shareMap);
 
-    // 2) 벤치마크(선물) + 보유종목 과거 종가를 병렬로 가져오기
-    //    Yahoo: 선물 ES=F / NQ=F, 개별주는 티커 그대로
-    //    Stooq: 선물 es.f / nq.f, 미국 개별주는 티커.us
-    const [spxMap, ndqMap, ...stockMaps] = await Promise.all([
-      fetchCloses({ yahoo: 'ES=F', stooq: 'es.f' }, fromDate),
-      fetchCloses({ yahoo: 'NQ=F', stooq: 'nq.f' }, fromDate),
-      ...symbols.map((s) =>
-        fetchCloses({ yahoo: s, stooq: `${s.toLowerCase()}.us` }, fromDate)
-      ),
+    // 2) 시간가중수익률 지수 (첫 기록일 = 100)
+    //    일수익률 = (오늘 평가액 - 오늘 매매금액) / 어제 평가액
+    //    → 매수로 돈이 들어와도, 매도로 돈이 나가도 수익률은 왜곡되지 않음
+    const index = [100];
+    for (let i = 1; i < chain.length; i++) {
+      const prev = chain[i - 1];
+      const cur = chain[i];
+      const r = prev.value > 0 ? (cur.value - cur.flow) / prev.value : 1;
+      index.push(index[i - 1] * (r > 0 ? r : 1));
+    }
+
+    // 3) 요청 구간으로 자르기
+    const fromDate = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+    let start = chain.findIndex((p) => p.date >= fromDate);
+    if (start === -1) start = chain.length - 1;
+    const windowChain = chain.slice(start);
+    const windowIndex = index.slice(start);
+    if (windowChain.length < 2) {
+      return Response.json({
+        points: [],
+        error: '이 구간에는 아직 데이터가 부족해요. 더 짧은 기간을 선택하거나 내일 다시 확인해 주세요.',
+      });
+    }
+
+    // 4) 벤치마크 종가 (구간 첫 기록일 기준, 주말 대비 며칠 여유)
+    const benchFrom = new Date(new Date(windowChain[0].date).getTime() - 7 * 864e5)
+      .toISOString()
+      .slice(0, 10);
+    const [spxMap, ndqMap] = await Promise.all([
+      fetchCloses({ yahoo: 'ES=F', stooq: 'es.f' }, benchFrom),
+      fetchCloses({ yahoo: 'NQ=F', stooq: 'nq.f' }, benchFrom),
     ]);
-
     if (!spxMap || !ndqMap) {
       const failed = [!spxMap && 'S&P500 선물', !ndqMap && '나스닥 선물'].filter(Boolean).join(', ');
       return Response.json(
-        {
-          points: [],
-          excluded: [],
-          error: `지수 데이터를 가져오지 못했어요 (${failed}). 잠시 후 다시 시도해 주세요.`,
-        },
+        { points: [], error: `지수 데이터를 가져오지 못했어요 (${failed}). 잠시 후 다시 시도해 주세요.` },
         { status: 502 }
       );
     }
+    const spxDates = Object.keys(spxMap).sort();
+    const ndqDates = Object.keys(ndqMap).sort();
 
-    // 데이터를 못 가져온 종목은 제외하고 알려줌 (신규상장 등)
-    const priceMaps = {};
-    const excluded = [];
-    symbols.forEach((s, i) => {
-      if (stockMaps[i]) priceMaps[s] = stockMaps[i];
-      else excluded.push(s);
-    });
-    const usable = Object.keys(priceMaps);
-    if (usable.length === 0) {
-      return Response.json({ points: [], excluded, error: '보유 종목의 과거 시세를 찾지 못했어요.' });
+    // 5) 구간 시작일 = 100으로 세 지수 모두 정규화
+    const myBase = windowIndex[0];
+    const spxBase = closeOnOrBefore(spxMap, spxDates, windowChain[0].date);
+    const ndqBase = closeOnOrBefore(ndqMap, ndqDates, windowChain[0].date);
+
+    const points = [];
+    for (let i = 0; i < windowChain.length; i++) {
+      const date = windowChain[i].date;
+      const spx = spxBase ? closeOnOrBefore(spxMap, spxDates, date) : null;
+      const ndq = ndqBase ? closeOnOrBefore(ndqMap, ndqDates, date) : null;
+      if (!spx || !ndq) continue;
+      points.push({
+        date,
+        my: Math.round((windowIndex[i] / myBase) * 10000) / 100,
+        spx: Math.round((spx / spxBase) * 10000) / 100,
+        ndq: Math.round((ndq / ndqBase) * 10000) / 100,
+      });
     }
 
-    // 3) 거래일 목록: S&P500 선물 기준
-    const dates = Object.keys(spxMap).sort();
-
-    // 4) 날짜별 포트폴리오 평가액 (휴장·결측일은 직전 가격으로 이어붙임)
-    const lastPrice = {};
-    const rawPoints = [];
-    for (const date of dates) {
-      let value = 0;
-      let ready = true;
-      for (const s of usable) {
-        if (priceMaps[s][date] !== undefined) lastPrice[s] = priceMaps[s][date];
-        if (lastPrice[s] === undefined) { ready = false; break; } // 아직 첫 시세 전
-        value += lastPrice[s] * shareMap[s];
-      }
-      if (!ready) continue; // 모든 종목 시세가 갖춰진 날부터 시작
-      rawPoints.push({ date, my: value, spx: spxMap[date], ndq: ndqMap[date] ?? null });
-    }
-    // 나스닥 결측일도 직전 값으로 채움
-    let lastNdq = null;
-    for (const p of rawPoints) {
-      if (p.ndq !== null) lastNdq = p.ndq;
-      else p.ndq = lastNdq;
-    }
-    const points = rawPoints.filter((p) => p.ndq !== null);
     if (points.length < 2) {
-      return Response.json({ points: [], excluded, error: '그래프를 그릴 데이터가 부족해요.' });
+      return Response.json({ points: [], error: '그래프를 그릴 데이터가 부족해요.' });
     }
 
-    // 5) 시작일 = 100 정규화
-    const base = points[0];
-    const normalized = points.map((p) => ({
-      date: p.date,
-      my: Math.round((p.my / base.my) * 10000) / 100,
-      spx: Math.round((p.spx / base.spx) * 10000) / 100,
-      ndq: Math.round((p.ndq / base.ndq) * 10000) / 100,
-    }));
-
-    return Response.json({ points: normalized, excluded });
+    return Response.json({ points });
   } catch (e) {
-    return Response.json({ points: [], excluded: [], error: e.message }, { status: 500 });
+    return Response.json({ points: [], error: e.message }, { status: 500 });
   }
 }

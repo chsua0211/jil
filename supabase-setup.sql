@@ -57,6 +57,16 @@ create table if not exists memories (
   created_at timestamptz default now()
 );
 
+-- 7) 포트폴리오 일별 기록 (성과 차트용)
+--    value: 그날 마지막으로 확인한 평가액 (USD)
+--    flow:  그날 매매로 들어오고(+매수) 나간(-매도) 돈의 합계 (USD)
+create table if not exists portfolio_history (
+  date date primary key,
+  value numeric,
+  flow numeric not null default 0,
+  created_at timestamptz default now()
+);
+
 -- RLS 해제 (개인용 앱, 비밀번호 게이트로 보호)
 alter table investor_profile disable row level security;
 alter table portfolio disable row level security;
@@ -64,3 +74,4 @@ alter table watchlist disable row level security;
 alter table saved_news disable row level security;
 alter table chat_messages disable row level security;
 alter table memories disable row level security;
+alter table portfolio_history disable row level security;

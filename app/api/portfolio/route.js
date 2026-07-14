@@ -1,4 +1,5 @@
 import { getSupabase } from '../../../lib/supabase';
+import { recordTrade, fetchPrice } from '../../../lib/snapshot';
 
 // 원/달러 환율 조회 (실패 시 대략치)
 async function fetchUsdKrw() {
@@ -119,6 +120,10 @@ export async function POST(request) {
     avg_cost: cost,
   });
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
+
+  // 성과 차트용: 매수 금액(현재가 기준)을 오늘의 flow로 기록
+  await recordTrade(Number(shares) * price);
+
   return Response.json({ ok: true, usedCurrentPrice: !avgCost, price });
 }
 
@@ -126,11 +131,23 @@ export async function POST(request) {
 export async function PUT(request) {
   const supabase = getSupabase();
   const { id, shares, avgCost } = await request.json();
+
+  // 수량 변화분 = 매매 → 성과 차트용 flow 계산을 위해 기존 수량 확보
+  const { data: before } = await supabase.from('portfolio').select('symbol, shares').eq('id', id).maybeSingle();
+
   const { error } = await supabase
     .from('portfolio')
     .update({ shares: Number(shares), avg_cost: Number(avgCost) })
     .eq('id', id);
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
+
+  if (before) {
+    const delta = Number(shares) - Number(before.shares);
+    if (delta !== 0) {
+      const price = (await fetchPrice(before.symbol)) || Number(avgCost) || 0;
+      await recordTrade(delta * price);
+    }
+  }
   return Response.json({ ok: true });
 }
 
@@ -138,7 +155,16 @@ export async function PUT(request) {
 export async function DELETE(request) {
   const supabase = getSupabase();
   const { id } = await request.json();
+
+  // 삭제 = 전량 매도 → 성과 차트용 flow 계산을 위해 삭제 전 정보 확보
+  const { data: before } = await supabase.from('portfolio').select('symbol, shares, avg_cost').eq('id', id).maybeSingle();
+
   const { error } = await supabase.from('portfolio').delete().eq('id', id);
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
+
+  if (before) {
+    const price = (await fetchPrice(before.symbol)) || Number(before.avg_cost) || 0;
+    await recordTrade(-Number(before.shares) * price);
+  }
   return Response.json({ ok: true });
 }

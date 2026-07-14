@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getSupabase } from '../../../lib/supabase';
+import { recordTrade } from '../../../lib/snapshot';
 
 function getAnthropic() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -234,6 +235,7 @@ async function executeTool(supabase, name, input) {
         avg_cost: price,
       });
       if (error) return { ok: false, error: error.message };
+      await recordTrade(shares * price); // 성과 차트용 매수 기록
       return {
         ok: true,
         message: `${sym} 등록 완료: 현재가 $${price.toFixed(2)} 기준 약 ${shares}주${rate ? ` (환율 ${Math.round(rate)}원/$ 적용)` : ''}. 평단가는 오늘 현재가로 기록됨 (대략치)`,
@@ -256,6 +258,7 @@ async function executeTool(supabase, name, input) {
         avg_cost: avgCost,
       });
       if (error) return { ok: false, error: error.message };
+      await recordTrade(Number(input.shares) * price); // 성과 차트용 매수 기록
       return {
         ok: true,
         message: `${sym} ${input.shares}주 추가됨 (평단 $${avgCost.toFixed(2)}${note})`,
@@ -277,11 +280,26 @@ async function executeTool(supabase, name, input) {
       if (Object.keys(patch).length === 0) return { ok: false, error: '변경할 값이 없습니다.' };
       const { error } = await supabase.from('portfolio').update(patch).eq('id', rows[0].id);
       if (error) return { ok: false, error: error.message };
+      // 수량이 바뀌었으면 그 차이만큼 매매로 기록 (성과 차트용)
+      if (patch.shares !== undefined) {
+        const delta = Number(patch.shares) - Number(rows[0].shares);
+        if (delta !== 0) {
+          const p = (await fetchPrice(sym)) || Number(rows[0].avg_cost) || 0;
+          await recordTrade(delta * p);
+        }
+      }
       return { ok: true, message: `${sym} 수정됨${patch.avg_cost !== undefined ? ` (평단 $${patch.avg_cost.toFixed(2)}${note})` : ''}` };
     }
     if (name === 'portfolio_remove') {
+      // 삭제 = 전량 매도 → 성과 차트용 flow 계산을 위해 삭제 전 수량 확보
+      const { data: rows } = await supabase.from('portfolio').select('shares, avg_cost').eq('symbol', sym);
       const { error } = await supabase.from('portfolio').delete().eq('symbol', sym);
       if (error) return { ok: false, error: error.message };
+      if (rows && rows.length > 0) {
+        const totalShares = rows.reduce((s, r) => s + Number(r.shares), 0);
+        const p = (await fetchPrice(sym)) || Number(rows[0].avg_cost) || 0;
+        await recordTrade(-totalShares * p);
+      }
       return { ok: true, message: `${sym} 포트폴리오에서 삭제됨` };
     }
     if (name === 'memory_add') {
