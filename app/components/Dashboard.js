@@ -9,84 +9,120 @@ import PerformanceChart from './PerformanceChart';
 import SurveyModal from './SurveyModal';
 import AnalystPanel from './AnalystPanel';
 
-const TABS = [
-  { id: 'home', label: '🏠 홈', title: '홈' },
-  { id: 'portfolio', label: '💼 포트폴리오', title: '포트폴리오' },
-  { id: 'watch', label: '⭐ 관심종목·뉴스', title: '관심종목·뉴스' },
+// 오른쪽 원형 아이콘 내비게이션 항목
+const NAV = [
+  { id: 'home', icon: '🏠', title: '홈 대시보드' },
+  { id: 'chat', icon: '💬', title: 'AI 채팅' },
+  { id: 'portfolio', icon: '💼', title: '포트폴리오' },
+  { id: 'watch', icon: '⭐', title: '관심종목·뉴스' },
 ];
 
+const VIEW_TITLE = {
+  home: '🏠 홈 대시보드',
+  chat: '💬 AI 채팅',
+  portfolio: '💼 포트폴리오',
+  watch: '⭐ 관심종목·뉴스',
+};
+
 export default function Dashboard() {
-  const [tab, setTab] = useState('home'); // 첫 화면은 채팅(홈)
+  const [tab, setTab] = useState('home'); // 첫 화면은 홈 대시보드
   const [showSurvey, setShowSurvey] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [chatPrompt, setChatPrompt] = useState(null);
 
   const refresh = () => setRefreshKey((k) => k + 1);
 
-  // 리스크 분석: 홈 탭으로 이동하면서 챗봇에 질문 전달
+  // 리스크 분석: 채팅으로 이동하면서 챗봇에 질문 전달
   const askRisk = () => {
-    setTab('home');
+    setTab('chat');
     setChatPrompt(
       '내 포트폴리오 리스크 분석해줘. 종목/섹터 쏠림, 수익률 상태, 내 손절 원칙 기준으로 위험한 종목 있는지, 그리고 개선 방향까지 알려줘.'
     );
   };
 
+  // 원형 아이콘 버튼 스타일
+  const circle = (active) => ({
+    width: 48,
+    height: 48,
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 20,
+    background: active ? 'var(--accent)' : 'var(--panel)',
+    border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+    boxShadow: '0 2px 10px rgba(0,0,0,0.35)',
+    transition: 'transform 0.1s, background 0.15s',
+  });
+
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '16px 16px' }}>
-      {/* 헤더: 탭 네비게이션 */}
-      <header
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '16px 76px 16px 16px' }}>
+      {/* ── 오른쪽 고정 원형 아이콘 내비게이션 ── */}
+      <nav
         style={{
+          position: 'fixed',
+          right: 12,
+          top: '50%',
+          transform: 'translateY(-50%)',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 14,
+          flexDirection: 'column',
           gap: 10,
-          flexWrap: 'wrap',
+          zIndex: 100,
         }}
       >
-        <div style={{ display: 'flex', gap: 6 }}>
-          {TABS.map((t) => {
-            const active = tab === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                style={{
-                  padding: '10px 18px',
-                  background: active ? 'var(--accent)' : 'var(--panel-2)',
-                  border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                  borderRadius: 10,
-                  color: active ? '#fff' : 'var(--text)',
-                  fontSize: 14,
-                  fontWeight: 600,
-                }}
-              >
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <div style={{ display: 'flex', gap: 8 }}>
+        {NAV.map((n) => (
           <button
-            onClick={() => setShowSurvey(true)}
-            style={{
-              padding: '10px 14px',
-              background: 'var(--panel-2)',
-              border: '1px solid var(--border)',
-              borderRadius: 10,
-              color: 'var(--text)',
-              fontSize: 13,
-              fontWeight: 600,
-            }}
+            key={n.id}
+            onClick={() => setTab(n.id)}
+            title={n.title}
+            aria-label={n.title}
+            style={circle(tab === n.id)}
           >
-            🧠 성향 설정
+            {n.icon}
           </button>
-        </div>
+        ))}
+        <button
+          onClick={() => setShowSurvey(true)}
+          title="성향 설정"
+          aria-label="성향 설정"
+          style={circle(false)}
+        >
+          🧠
+        </button>
+      </nav>
+
+      {/* 현재 화면 제목 */}
+      <header style={{ marginBottom: 14 }}>
+        <h1 style={{ fontSize: 18, fontWeight: 700 }}>{VIEW_TITLE[tab]}</h1>
       </header>
 
-      {/* ── 탭 1: 홈 (채팅 전체 화면) ── */}
+      {/* ── 홈 대시보드: 한눈에 보는 요약 ── */}
       {tab === 'home' && (
+        <div>
+          <PerformanceChart refreshKey={refreshKey} />
+          <div style={{ marginBottom: 12 }}>
+            <Portfolio refreshKey={refreshKey} onAskRisk={askRisk} />
+          </div>
+          <div
+            className="grid-main"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1.2fr',
+              gap: 12,
+              alignItems: 'start',
+            }}
+          >
+            <Watchlist key={`watch-${refreshKey}`} onChange={refresh} />
+            <NewsPanel key={`news-${refreshKey}`} />
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 10 }}>
+            💡 오른쪽 동그란 버튼으로 화면을 이동해요. 종목을 클릭하면 차트가 열려요.
+          </p>
+        </div>
+      )}
+
+      {/* ── 채팅 ── */}
+      {tab === 'chat' && (
         <Chat
           fullHeight
           externalPrompt={chatPrompt}
@@ -95,7 +131,7 @@ export default function Dashboard() {
         />
       )}
 
-      {/* ── 탭 2: 포트폴리오 (성과 비교 차트 + 자산 현황) ── */}
+      {/* ── 포트폴리오 (성과 비교 차트 + 자산 현황) ── */}
       {tab === 'portfolio' && (
         <div>
           <PerformanceChart refreshKey={refreshKey} />
@@ -107,7 +143,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── 탭 3: 관심종목 + 최신 뉴스 + 애널리스트 ── */}
+      {/* ── 관심종목 + 최신 뉴스 + 애널리스트 ── */}
       {tab === 'watch' && (
         <div>
           <div
