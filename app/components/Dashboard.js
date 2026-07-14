@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import NewsPanel from './NewsPanel';
 import Watchlist from './Watchlist';
 import Chat from './Chat';
@@ -8,19 +8,79 @@ import Portfolio from './Portfolio';
 import PerformanceChart from './PerformanceChart';
 import SurveyModal from './SurveyModal';
 import AnalystPanel from './AnalystPanel';
-import HomeDashboard, { greeting, usMarketOpen } from './HomeDashboard';
-import { IconHome, IconChart, IconChat, IconBriefcase, IconStar, IconTune } from './icons';
+import { IconHome, IconChat, IconBriefcase, IconStar, IconTune } from './icons';
 
-// 화면 목록 (런처의 큰 원 + 안쪽 화면의 독에서 공용)
+// 화면 목록 (런처 버블 + 안쪽 화면의 독에서 공용)
 const VIEWS = [
-  { id: 'dashboard', Icon: IconChart, title: '대시보드' },
   { id: 'chat', Icon: IconChat, title: 'AI 채팅' },
   { id: 'portfolio', Icon: IconBriefcase, title: '포트폴리오' },
   { id: 'watch', Icon: IconStar, title: '관심종목·뉴스' },
 ];
 
+// 시간대별 인사말
+function greeting() {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return '좋은 아침이에요, 정일님';
+  if (h >= 12 && h < 18) return '좋은 오후예요, 정일님';
+  return '좋은 저녁이에요, 정일님';
+}
+
+// 미국 정규장 개장 여부 (뉴욕 시간 월~금 9:30~16:00, 휴장일은 고려 안 함)
+function usMarketOpen() {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      weekday: 'short',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false,
+    }).formatToParts(new Date());
+    const get = (t) => parts.find((p) => p.type === t)?.value;
+    const day = get('weekday');
+    const mins = Number(get('hour')) * 60 + Number(get('minute'));
+    if (day === 'Sat' || day === 'Sun') return false;
+    return mins >= 9 * 60 + 30 && mins < 16 * 60;
+  } catch {
+    return false;
+  }
+}
+
+// 초까지 흐르는 디지털 시계
+function Clock() {
+  const [now, setNow] = useState(null);
+  useEffect(() => {
+    setNow(new Date());
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  if (!now) return <div style={{ height: 56 }} />;
+  const two = (n) => String(n).padStart(2, '0');
+  return (
+    <div
+      style={{
+        fontSize: 48,
+        fontWeight: 700,
+        fontVariantNumeric: 'tabular-nums',
+        letterSpacing: 3,
+        lineHeight: 1.1,
+      }}
+    >
+      {two(now.getHours())}:{two(now.getMinutes())}
+      <span style={{ color: 'var(--text-dim)' }}>:{two(now.getSeconds())}</span>
+    </div>
+  );
+}
+
+// 런처 버블 배치: 크기가 다른 원들이 살짝 닿을 정도로 촘촘하게 (비대칭 클러스터)
+// left/top은 360x316 컨테이너 기준 px
+const BUBBLES = [
+  { id: 'chat', size: 150, left: 105, top: 81, main: true, iconSize: 34 },
+  { id: 'portfolio', size: 116, left: 20, top: 16, iconSize: 26 },
+  { id: 'watch', size: 104, left: 238, top: 166, iconSize: 24 },
+];
+
 export default function Dashboard() {
-  const [tab, setTab] = useState('launcher'); // 첫 화면은 원형 런처
+  const [tab, setTab] = useState('launcher'); // 첫 화면은 버블 런처
   const [showSurvey, setShowSurvey] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [chatPrompt, setChatPrompt] = useState(null);
@@ -28,13 +88,12 @@ export default function Dashboard() {
 
   const refresh = () => setRefreshKey((k) => k + 1);
 
-  // 런처의 원을 누르면: 그 위치에서 동그라미가 화면 전체로 커진 뒤 화면 전환
+  // 버블을 누르면: 그 위치에서 동그라미가 화면 전체로 커진 뒤 화면 전환
   const openView = (e, target) => {
     if (reveal) return;
     const r = e.currentTarget.getBoundingClientRect();
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
-    // 화면 네 모서리까지 모두 덮는 확대 배율
     const dist = Math.hypot(
       Math.max(cx, window.innerWidth - cx),
       Math.max(cy, window.innerHeight - cy)
@@ -75,21 +134,22 @@ export default function Dashboard() {
         />
       )}
 
-      {/* ── 첫 화면: 가운데 원형 런처 ── */}
+      {/* ── 첫 화면: 시계 + 비대칭 버블 런처 ── */}
       {tab === 'launcher' && (
         <div
           style={{
-            minHeight: '82vh',
+            minHeight: '86vh',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 34,
+            gap: 26,
           }}
         >
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 23, fontWeight: 700 }}>{greeting()}</div>
-            <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 6 }}>
+            <Clock />
+            <div style={{ fontSize: 15, fontWeight: 600, marginTop: 10 }}>{greeting()}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 4 }}>
               {new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })}
               {' · '}
               <span style={{ color: open ? 'var(--up)' : 'var(--text-faint)' }}>
@@ -98,33 +158,46 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {VIEWS.map(({ id, Icon, title }) => (
-              <div key={id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-                <button onClick={(e) => openView(e, id)} className="launch-circle" aria-label={title}>
-                  <Icon width={32} height={32} />
+          <div className="bubble-field" style={{ position: 'relative', width: 360, height: 316 }}>
+            {BUBBLES.map((b) => {
+              const view = VIEWS.find((v) => v.id === b.id);
+              return (
+                <button
+                  key={b.id}
+                  onClick={(e) => openView(e, b.id)}
+                  aria-label={view.title}
+                  className={`bubble${b.main ? ' bubble-main' : ''}`}
+                  style={{ width: b.size, height: b.size, left: b.left, top: b.top }}
+                >
+                  <view.Icon width={b.iconSize} height={b.iconSize} />
+                  <span style={{ fontSize: b.main ? 13 : 12, fontWeight: 600 }}>{view.title}</span>
                 </button>
-                <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{title}</span>
-              </div>
-            ))}
-          </div>
+              );
+            })}
 
-          <button
-            onClick={() => setShowSurvey(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '8px 16px',
-              borderRadius: 999,
-              background: 'transparent',
-              border: '1px solid var(--border)',
-              color: 'var(--text-faint)',
-              fontSize: 12,
-            }}
-          >
-            <IconTune width={15} height={15} /> 성향 설정
-          </button>
+            {/* 앞으로 추가될 탭 자리 */}
+            <div
+              className="bubble bubble-ghost"
+              style={{ width: 76, height: 76, left: 172, top: 0 }}
+              title="앞으로 추가될 탭 자리"
+              aria-hidden="true"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </div>
+
+            {/* 성향 설정 (작은 버블) */}
+            <button
+              onClick={() => setShowSurvey(true)}
+              aria-label="성향 설정"
+              title="성향 설정"
+              className="bubble"
+              style={{ width: 64, height: 64, left: 56, top: 192 }}
+            >
+              <IconTune width={18} height={18} />
+            </button>
+          </div>
         </div>
       )}
 
@@ -169,9 +242,6 @@ export default function Dashboard() {
           </h1>
         </header>
       )}
-
-      {/* ── 대시보드 (자산 요약) ── */}
-      {tab === 'dashboard' && <HomeDashboard refreshKey={refreshKey} />}
 
       {/* ── 채팅 ── */}
       {tab === 'chat' && (

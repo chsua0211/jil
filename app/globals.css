@@ -65,26 +65,48 @@ input, textarea { font-family: inherit; }
 .scroll::-webkit-scrollbar { width: 6px; }
 .scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-/* 첫 화면(런처)의 큰 원형 버튼 */
-.launch-circle {
-  width: 94px;
-  height: 94px;
+/* 첫 화면(런처)의 비대칭 버블 */
+.bubble {
+  position: absolute;
   border-radius: 50%;
   background: var(--panel);
-  border: 1px solid var(--border);
+  border: 1px solid #2a3546;
   color: var(--text-dim);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 5px;
   transition: background 0.15s, color 0.15s, transform 0.15s, border-color 0.15s;
 }
-.launch-circle:hover {
+.bubble:hover {
   background: var(--panel-2);
   color: var(--accent);
   border-color: var(--accent);
-  transform: translateY(-4px) scale(1.04);
+  transform: translateY(-4px) scale(1.03);
+  z-index: 2;
 }
-.launch-circle:active { transform: scale(0.96); }
+.bubble:active { transform: scale(0.96); }
+.bubble-main {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.bubble-main:hover {
+  background: #5c99ff;
+  color: #fff;
+  transform: translateY(-4px) scale(1.03);
+}
+.bubble-ghost {
+  background: transparent;
+  border: 1.5px dashed #2a3546;
+  color: #3b4657;
+  pointer-events: none;
+}
+
+@media (max-width: 420px) {
+  .bubble-field { transform: scale(0.85); transform-origin: top center; }
+}
 
 /* 오른쪽 고정 아이콘 독 */
 .dock {
