@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import NewsPanel from './NewsPanel';
 import Watchlist from './Watchlist';
 import Chat from './Chat';
+import AnalystPanel from './AnalystPanel';
 import SurveyModal from './SurveyModal';
 
 export default function Dashboard() {
@@ -100,6 +101,11 @@ export default function Dashboard() {
         <NewsPanel key={`news-${refreshKey}`} />
         <Watchlist key={`watch-${refreshKey}`} onChange={() => setRefreshKey((k) => k + 1)} />
         <Chat />
+      </div>
+
+      {/* 애널리스트 리포트 분석 (전체 폭) */}
+      <div style={{ marginTop: 12 }}>
+        <AnalystPanel />
       </div>
 
       {showSurvey && (
