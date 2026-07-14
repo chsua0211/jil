@@ -10,7 +10,15 @@ function describeProfile(answers, summary) {
   if (!answers || Object.keys(answers).length === 0) {
     return '아직 성향 설문을 안 하셨어요. 일반적인 투자 관점으로 답하되, 정일님이 설문을 채우시면 더 정확해진다고 안내해 주세요.';
   }
-  const lines = Object.entries(answers).map(([k, v]) => `- ${k}: ${v}`);
+  const lines = Object.entries(answers)
+    .map(([k, v]) => {
+      const val = Array.isArray(v) ? v.join(', ') : v;
+      return val ? `- ${k}: ${val}` : null;
+    })
+    .filter(Boolean);
+  if (lines.length === 0) {
+    return '아직 성향 설문을 안 하셨어요. 일반적인 투자 관점으로 답하되, 정일님이 설문을 채우시면 더 정확해진다고 안내해 주세요.';
+  }
   let text = '아래는 정일님이 직접 답하신 투자 성향입니다:\n' + lines.join('\n');
   if (summary) text += `\n\n[정일님 스타일 요약]\n${summary}`;
   return text;

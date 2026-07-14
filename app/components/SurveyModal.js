@@ -7,14 +7,34 @@ export default function SurveyModal({ onClose, onSaved }) {
   const [answers, setAnswers] = useState({});
   const [saving, setSaving] = useState(false);
 
-  // 기존 답변 불러오기
+  // 기존 답변 불러오기 (예전 데이터가 문자열이면 배열로 변환해 호환)
   useEffect(() => {
     fetch('/api/profile')
       .then((r) => r.json())
-      .then((d) => d.answers && setAnswers(d.answers));
+      .then((d) => {
+        if (d.answers) setAnswers(d.answers);
+      });
   }, []);
 
-  const pick = (id, val) => setAnswers((a) => ({ ...a, [id]: val }));
+  // 객관식: 여러 개 선택 가능 (토글). 이미 있으면 빼고, 없으면 더함.
+  const toggle = (id, val) => {
+    setAnswers((a) => {
+      const cur = a[id];
+      const arr = Array.isArray(cur) ? cur : cur ? [cur] : [];
+      const next = arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val];
+      return { ...a, [id]: next };
+    });
+  };
+
+  // 주관식(텍스트)
+  const setText = (id, val) => setAnswers((a) => ({ ...a, [id]: val }));
+
+  // 이 옵션이 선택돼 있는지 (문자열/배열 둘 다 대응)
+  const isPicked = (id, val) => {
+    const cur = answers[id];
+    if (Array.isArray(cur)) return cur.includes(val);
+    return cur === val;
+  };
 
   const save = async () => {
     setSaving(true);
@@ -56,7 +76,8 @@ export default function SurveyModal({ onClose, onSaved }) {
           </button>
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 20 }}>
-          답하실수록 AI가 더 정일님 스타일로 분석해 드려요. 언제든 다시 고치실 수 있어요.
+          답하실수록 AI가 더 정일님 스타일로 분석해 드려요. 여러 개 선택할 수 있고,
+          안 채우셔도 저장돼요. 언제든 다시 고치실 수 있어요.
         </p>
 
         {SURVEY.map((sec) => (
@@ -79,7 +100,7 @@ export default function SurveyModal({ onClose, onSaved }) {
                 {qq.type === 'text' ? (
                   <textarea
                     value={answers[qq.id] || ''}
-                    onChange={(e) => pick(qq.id, e.target.value)}
+                    onChange={(e) => setText(qq.id, e.target.value)}
                     rows={2}
                     style={{
                       width: '100%',
@@ -96,11 +117,11 @@ export default function SurveyModal({ onClose, onSaved }) {
                 ) : (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                     {qq.options.map((opt) => {
-                      const active = answers[qq.id] === opt;
+                      const active = isPicked(qq.id, opt);
                       return (
                         <button
                           key={opt}
-                          onClick={() => pick(qq.id, opt)}
+                          onClick={() => toggle(qq.id, opt)}
                           style={{
                             padding: '8px 12px',
                             background: active ? 'var(--accent)' : 'var(--panel-2)',
@@ -110,7 +131,7 @@ export default function SurveyModal({ onClose, onSaved }) {
                             fontSize: 13,
                           }}
                         >
-                          {opt}
+                          {active ? '✓ ' : ''}{opt}
                         </button>
                       );
                     })}

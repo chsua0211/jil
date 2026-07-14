@@ -16,7 +16,15 @@ export default function Dashboard() {
   useEffect(() => {
     fetch('/api/profile')
       .then((r) => r.json())
-      .then((d) => setHasProfile(d.answers && Object.keys(d.answers).length > 0));
+      .then((d) => {
+        // 실제로 값이 채워진 답이 하나라도 있으면 설문 완료로 간주 (빈 배열/빈 문자열 제외)
+        const filled =
+          d.answers &&
+          Object.values(d.answers).some((v) =>
+            Array.isArray(v) ? v.length > 0 : v && String(v).trim()
+          );
+        setHasProfile(!!filled);
+      });
   }, [refreshKey]);
 
   return (

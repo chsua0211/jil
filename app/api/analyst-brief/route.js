@@ -36,7 +36,13 @@ export async function POST(request) {
     const profileText =
       profile?.summary ||
       (profile?.answers && Object.keys(profile.answers).length
-        ? Object.entries(profile.answers).map(([k, v]) => `${k}: ${v}`).join(', ')
+        ? Object.entries(profile.answers)
+            .map(([k, v]) => {
+              const val = Array.isArray(v) ? v.join(', ') : v;
+              return val ? `${k}: ${val}` : null;
+            })
+            .filter(Boolean)
+            .join(', ')
         : '아직 성향 설문 없음');
 
     // 3) 데이터를 텍스트로 정리
