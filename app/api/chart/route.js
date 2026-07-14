@@ -4,24 +4,66 @@ import { getSupabase } from '../../../lib/supabase';
 // 성과 비교 차트 데이터: 내 포트폴리오 지수 vs S&P500 선물 vs 나스닥 선물
 // GET /api/chart?days=90
 //
+// 데이터 소스: Yahoo Finance (메인) → 실패 시 Stooq (폴백)
+//  * Stooq는 일일 요청 한도가 낮아서 서버(Vercel)에서 자주 막힘
+//  * Yahoo는 키 없이 사용 가능하고 한도가 훨씬 널널함
+//
 // 과거 포트폴리오 평가액 기록이 없으므로,
 // "현재 보유 종목·수량을 과거에도 그대로 들고 있었다면"을 가정하고
-// 각 종목의 과거 일별 종가(Stooq, 무료·키 불필요)로 합산 지수를 역산함.
+// 각 종목의 과거 일별 종가로 합산 지수를 역산함.
 // 세 지수 모두 시작일 = 100으로 정규화해서 수익률 비교가 바로 보이게 함.
 // ─────────────────────────────────────────────────────────────
 
 export const dynamic = 'force-dynamic';
 
-// Stooq에서 일별 종가 가져오기: { 'YYYY-MM-DD': close, ... }
-async function fetchStooqCloses(stooqSymbol, fromDate) {
-  const d1 = fromDate.replace(/-/g, '');
-  const d2 = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSymbol)}&d1=${d1}&d2=${d2}&i=d`;
+const YAHOO_HEADERS = {
+  // UA 없으면 Yahoo가 요청을 거부하는 경우가 있음
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+};
+
+// ── 소스 1: Yahoo Finance ──
+// 반환: { 'YYYY-MM-DD': close, ... } 또는 null
+async function fetchYahooCloses(yahooSymbol, fromDate) {
   try {
-    const res = await fetch(url, { next: { revalidate: 3600 } }); // 1시간 캐시
+    const period1 = Math.floor(new Date(fromDate).getTime() / 1000);
+    const period2 = Math.floor(Date.now() / 1000);
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+      yahooSymbol
+    )}?period1=${period1}&period2=${period2}&interval=1d`;
+    const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 3600 } });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const result = json?.chart?.result?.[0];
+    const timestamps = result?.timestamp;
+    const closes = result?.indicators?.quote?.[0]?.close;
+    if (!timestamps || !closes) return null;
+
+    const map = {};
+    for (let i = 0; i < timestamps.length; i++) {
+      const c = closes[i];
+      if (c === null || c === undefined || c <= 0) continue;
+      const date = new Date(timestamps[i] * 1000).toISOString().slice(0, 10);
+      map[date] = c;
+    }
+    return Object.keys(map).length ? map : null;
+  } catch {
+    return null;
+  }
+}
+
+// ── 소스 2: Stooq (폴백) ──
+async function fetchStooqCloses(stooqSymbol, fromDate) {
+  try {
+    const d1 = fromDate.replace(/-/g, '');
+    const d2 = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSymbol)}&d1=${d1}&d2=${d2}&i=d`;
+    const res = await fetch(url, { next: { revalidate: 3600 } });
     const text = await res.text();
+    // 한도 초과 시 CSV 대신 안내 문구가 옴 → 첫 줄이 Date로 시작하는지 확인
+    if (!text.startsWith('Date')) return null;
     const lines = text.trim().split('\n');
-    if (lines.length < 2) return null; // 데이터 없음
+    if (lines.length < 2) return null;
     const map = {};
     for (const line of lines.slice(1)) {
       const cols = line.split(',');
@@ -33,6 +75,13 @@ async function fetchStooqCloses(stooqSymbol, fromDate) {
   } catch {
     return null;
   }
+}
+
+// Yahoo 먼저, 안 되면 Stooq
+async function fetchCloses({ yahoo, stooq }, fromDate) {
+  const fromYahoo = await fetchYahooCloses(yahoo, fromDate);
+  if (fromYahoo) return fromYahoo;
+  return fetchStooqCloses(stooq, fromDate);
 }
 
 export async function GET(request) {
@@ -56,22 +105,30 @@ export async function GET(request) {
     }
     const symbols = Object.keys(shareMap);
 
-    // 2) 벤치마크 + 보유종목 과거 종가를 병렬로 가져오기
-    //    Stooq 심볼: S&P500 선물 = es.f, 나스닥100 선물 = nq.f, 미국 개별주 = 티커.us
+    // 2) 벤치마크(선물) + 보유종목 과거 종가를 병렬로 가져오기
+    //    Yahoo: 선물 ES=F / NQ=F, 개별주는 티커 그대로
+    //    Stooq: 선물 es.f / nq.f, 미국 개별주는 티커.us
     const [spxMap, ndqMap, ...stockMaps] = await Promise.all([
-      fetchStooqCloses('es.f', fromDate),
-      fetchStooqCloses('nq.f', fromDate),
-      ...symbols.map((s) => fetchStooqCloses(`${s.toLowerCase()}.us`, fromDate)),
+      fetchCloses({ yahoo: 'ES=F', stooq: 'es.f' }, fromDate),
+      fetchCloses({ yahoo: 'NQ=F', stooq: 'nq.f' }, fromDate),
+      ...symbols.map((s) =>
+        fetchCloses({ yahoo: s, stooq: `${s.toLowerCase()}.us` }, fromDate)
+      ),
     ]);
 
     if (!spxMap || !ndqMap) {
+      const failed = [!spxMap && 'S&P500 선물', !ndqMap && '나스닥 선물'].filter(Boolean).join(', ');
       return Response.json(
-        { points: [], excluded: [], error: '지수 데이터를 가져오지 못했어요. 잠시 후 다시 시도해 주세요.' },
+        {
+          points: [],
+          excluded: [],
+          error: `지수 데이터를 가져오지 못했어요 (${failed}). 잠시 후 다시 시도해 주세요.`,
+        },
         { status: 502 }
       );
     }
 
-    // 데이터를 못 가져온 종목은 제외하고 알려줌 (신규상장 등 Stooq에 없을 수 있음)
+    // 데이터를 못 가져온 종목은 제외하고 알려줌 (신규상장 등)
     const priceMaps = {};
     const excluded = [];
     symbols.forEach((s, i) => {
@@ -83,7 +140,7 @@ export async function GET(request) {
       return Response.json({ points: [], excluded, error: '보유 종목의 과거 시세를 찾지 못했어요.' });
     }
 
-    // 3) 거래일 목록: S&P500 선물 기준 (거래일)
+    // 3) 거래일 목록: S&P500 선물 기준
     const dates = Object.keys(spxMap).sort();
 
     // 4) 날짜별 포트폴리오 평가액 (휴장·결측일은 직전 가격으로 이어붙임)
