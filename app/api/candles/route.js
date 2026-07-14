@@ -3,10 +3,11 @@
 // GET /api/candles?symbol=NVDA&interval=1m|10m|1d
 //
 // 데이터 소스: Yahoo Finance (키 불필요)
-//  - 1m : 최근 1거래일, 1분봉
-//  - 10m: 최근 5거래일, 5분봉을 2개씩 합쳐 10분봉으로 만듦
+//  - 1m : 최근 2거래일, 1분봉
+//  - 10m: 최근 1개월, 5분봉을 2개씩 합쳐 10분봉으로 만듦
 //         (Yahoo에 10분 간격이 없어서 서버에서 합성)
-//  - 1d : 최근 6개월, 일봉
+//  - 1d : 최근 2년, 일봉
+// 범위를 넉넉히 잡는 이유: 이동평균 120개·일목균형표(52+26칸) 계산에 과거 봉이 필요함
 // ─────────────────────────────────────────────────────────────
 
 export const dynamic = 'force-dynamic';
@@ -19,9 +20,9 @@ const YAHOO_HEADERS = {
 
 // interval 파라미터 → Yahoo 요청 설정
 const INTERVAL_CONFIG = {
-  '1m': { yahooInterval: '1m', range: '1d', revalidate: 60 },
-  '10m': { yahooInterval: '5m', range: '5d', revalidate: 120 },
-  '1d': { yahooInterval: '1d', range: '6mo', revalidate: 3600 },
+  '1m': { yahooInterval: '1m', range: '2d', revalidate: 60 },
+  '10m': { yahooInterval: '5m', range: '1mo', revalidate: 120 },
+  '1d': { yahooInterval: '1d', range: '2y', revalidate: 3600 },
 };
 
 async function fetchYahooCandles(symbol, { yahooInterval, range, revalidate }) {
