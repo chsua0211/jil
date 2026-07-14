@@ -82,17 +82,31 @@ ${profileText}
 - 투자 조언은 참고용이고 최종 판단은 정일님 몫이라는 점을 자연스럽게 안내합니다.
 - 확실하지 않은 건 솔직하게 모른다고 말합니다. 없는 숫자를 지어내지 않습니다.`;
 
-    // 3) Claude 호출 (웹 검색 도구 포함). 애널리스트 데이터 있으면 메시지에 첨부.
+    // 3) Claude 호출. 웹 검색 도구를 먼저 시도하고, 안 되면 검색 없이 다시 답한다.
     const userContent = message + analystContext;
     const messages = [...history, { role: 'user', content: userContent }];
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
-      system,
-      messages,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-    });
+    let response;
+    try {
+      // 웹 검색 도구 포함 시도
+      response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1500,
+        system,
+        messages,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      });
+    } catch (searchErr) {
+      // 웹 검색이 아직 활성화 안 됐거나 문제가 있으면, 검색 없이 답한다.
+      response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1500,
+        system:
+          system +
+          '\n\n(참고: 지금은 실시간 웹 검색을 쓸 수 없어요. 알고 있는 지식과 주어진 데이터만으로 답하고, 최신 정보가 필요한 부분은 확실하지 않을 수 있다고 안내해 주세요.)',
+        messages,
+      });
+    }
 
     // 4) 텍스트 응답만 추출
     const reply = response.content

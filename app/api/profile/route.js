@@ -52,10 +52,13 @@ export async function POST(request) {
       }
     }
 
-    await supabase
+    const { error: saveErr } = await supabase
       .from('investor_profile')
-      .update({ answers, summary, updated_at: new Date().toISOString() })
-      .eq('id', 1);
+      .upsert({ id: 1, answers, summary, updated_at: new Date().toISOString() });
+
+    if (saveErr) {
+      return Response.json({ ok: false, error: saveErr.message }, { status: 500 });
+    }
 
     return Response.json({ ok: true, summary });
   } catch (e) {

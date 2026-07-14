@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import NewsPanel from './NewsPanel';
 import Watchlist from './Watchlist';
 import Chat from './Chat';
@@ -9,23 +9,7 @@ import SurveyModal from './SurveyModal';
 
 export default function Dashboard() {
   const [showSurvey, setShowSurvey] = useState(false);
-  const [hasProfile, setHasProfile] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
-
-  // 설문 했는지 확인 (안 했으면 배너 노출)
-  useEffect(() => {
-    fetch('/api/profile')
-      .then((r) => r.json())
-      .then((d) => {
-        // 실제로 값이 채워진 답이 하나라도 있으면 설문 완료로 간주 (빈 배열/빈 문자열 제외)
-        const filled =
-          d.answers &&
-          Object.values(d.answers).some((v) =>
-            Array.isArray(v) ? v.length > 0 : v && String(v).trim()
-          );
-        setHasProfile(!!filled);
-      });
-  }, [refreshKey]);
 
   return (
     <div style={{ maxWidth: 1280, margin: '0 auto', padding: '20px 16px' }}>
@@ -73,28 +57,6 @@ export default function Dashboard() {
           🧠 성향 설정
         </button>
       </header>
-
-      {/* 설문 안 했을 때 배너 */}
-      {!hasProfile && (
-        <div
-          onClick={() => setShowSurvey(true)}
-          className="panel"
-          style={{
-            marginBottom: 16,
-            cursor: 'pointer',
-            borderColor: 'var(--accent)',
-            background: 'var(--accent-dim)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-          }}
-        >
-          <span style={{ fontSize: 18 }}>👋</span>
-          <span style={{ fontSize: 14 }}>
-            먼저 성향 설문을 채워 주세요. 그래야 AI가 <b>정일님 스타일로</b> 분석해 드려요!
-          </span>
-        </div>
-      )}
 
       {/* 3단 그리드 */}
       <div
