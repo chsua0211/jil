@@ -5,7 +5,7 @@ import NewsPanel from './NewsPanel';
 import Watchlist from './Watchlist';
 import Chat from './Chat';
 import Portfolio from './Portfolio';
-import PortfolioModal from './PortfolioModal';
+import PerformanceChart from './PerformanceChart';
 import SurveyModal from './SurveyModal';
 import AnalystPanel from './AnalystPanel';
 
@@ -18,7 +18,6 @@ const TABS = [
 export default function Dashboard() {
   const [tab, setTab] = useState('home'); // 첫 화면은 채팅(홈)
   const [showSurvey, setShowSurvey] = useState(false);
-  const [showPortfolio, setShowPortfolio] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [chatPrompt, setChatPrompt] = useState(null);
 
@@ -96,28 +95,14 @@ export default function Dashboard() {
         />
       )}
 
-      {/* ── 탭 2: 포트폴리오 + 자산 현황 ── */}
+      {/* ── 탭 2: 포트폴리오 (성과 비교 차트 + 자산 현황) ── */}
       {tab === 'portfolio' && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-            <button
-              onClick={() => setShowPortfolio(true)}
-              style={{
-                padding: '9px 16px',
-                background: 'var(--accent)',
-                border: 'none',
-                borderRadius: 8,
-                color: '#fff',
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
-              ✏️ 종목 입력·수정
-            </button>
-          </div>
+          <PerformanceChart refreshKey={refreshKey} />
           <Portfolio refreshKey={refreshKey} onAskRisk={askRisk} />
           <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 10 }}>
-            💡 채팅에서도 관리할 수 있어요. 예: &quot;엔비디아 10주 평단 150에 추가해줘&quot;
+            💡 종목 추가·수정·삭제는 채팅으로 해요. 예: &quot;엔비디아 10주 평단 150에 추가해줘&quot;,
+            &quot;엔비디아에 1억 있어&quot;, &quot;테슬라 포트폴리오에서 빼줘&quot;
           </p>
         </div>
       )}
@@ -144,13 +129,6 @@ export default function Dashboard() {
             💡 채팅에서도 관리할 수 있어요. 예: &quot;테슬라 관심종목에 넣어줘&quot;
           </p>
         </div>
-      )}
-
-      {showPortfolio && (
-        <PortfolioModal
-          onClose={() => setShowPortfolio(false)}
-          onSaved={refresh}
-        />
       )}
 
       {showSurvey && (

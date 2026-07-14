@@ -61,7 +61,7 @@ export async function POST(request) {
     // 4) Claude에게 정일님 스타일 해석 요청
     const res = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 900,
+      max_tokens: 4000, // 넉넉하게 (기존 900은 중간에 끊길 수 있었음)
       system: `당신은 '정일님'의 투자 분신 AI입니다. 아래 정일님의 투자 성향에 맞춰서 애널리스트 데이터를 해석하고 조언합니다.
 
 [정일님 스타일]

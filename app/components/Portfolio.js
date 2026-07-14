@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 const fmt = (n) => '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
 const fmt2 = (n) => '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// 현황 보기 전용 패널. 입력/수정은 헤더의 포트폴리오 버튼 → 팝업에서.
+// 현황 보기 전용 패널. 종목 추가/수정/삭제는 채팅으로.
 export default function Portfolio({ onAskRisk, refreshKey }) {
   const [data, setData] = useState({ holdings: [], total: null });
   const [loading, setLoading] = useState(true);
@@ -41,7 +41,8 @@ export default function Portfolio({ onAskRisk, refreshKey }) {
 
       {!loading && data.holdings.length === 0 && (
         <p style={{ fontSize: 13, color: 'var(--text-faint)' }}>
-          상단의 💼 포트폴리오 버튼에서 보유 종목을 입력해 보세요. 실시간 자산 현황이 여기 표시돼요.
+          아직 등록된 종목이 없어요. 홈 탭 채팅에 &quot;엔비디아에 1억 있어&quot;처럼 말씀하시면
+          자동으로 등록되고, 실시간 자산 현황이 여기 표시돼요.
         </p>
       )}
 
