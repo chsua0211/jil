@@ -114,7 +114,14 @@ export default function Reports() {
           >
             {r.source}
           </span>
-          <span style={{ fontSize: 13, lineHeight: 1.5, flex: 1 }}>{r.title}</span>
+          <span style={{ fontSize: 13, lineHeight: 1.5, flex: 1 }}>
+            {r.titleKo || r.title}
+            {r.titleKo && r.titleKo !== r.title && (
+              <span style={{ display: 'block', fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
+                {r.title}
+              </span>
+            )}
+          </span>
           <span style={{ fontSize: 11, color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>
             {r.date ? r.date.slice(5).replace('-', '/') : ''} ↗
           </span>

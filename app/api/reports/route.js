@@ -9,7 +9,10 @@
 // 각 소스는 5분 캐시 → 새로고침해도 원사이트에 과도한 요청 없음
 // ─────────────────────────────────────────────────────────────
 
+import Anthropic from '@anthropic-ai/sdk';
+
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30; // 번역(AI)까지 여유 있게
 
 const UA = {
   'User-Agent':
@@ -75,6 +78,9 @@ async function fromTrendforce(pageUrl, linkPattern, source, limit = 6) {
     let url = m[1];
     const title = decode(m[2]);
     if (title.length < 20) continue; // 썸네일·더보기 링크 제외
+    // 카테고리·메뉴 링크 제외: 실제 기사 URL은 날짜를 포함 (20260721 또는 2026/07/17)
+    if (url.includes('/category/') || /\s/.test(url)) continue;
+    if (!/20\d{6}/.test(url) && !/20\d{2}\/\d{2}\/\d{2}/.test(url)) continue;
     if (url.startsWith('/')) url = `https://www.trendforce.com${url}`;
     if (seen.has(url)) continue;
     seen.add(url);
@@ -117,6 +123,72 @@ async function fromHankyung(limit = 8) {
   return items;
 }
 
+// ─── 영문 헤드라인 → 한국어 번역 ────────────────────────────────
+// 이미 번역한 제목은 메모리 캐시로 재사용 → 새 헤드라인만 AI 호출
+const transCache = new Map(); // 영문 title → 한국어 titleKo
+
+async function translateTitles(reports) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) {
+    // 번역 불가 시 원문 그대로
+    for (const r of reports) r.titleKo = r.title;
+    return reports;
+  }
+
+  // 번역 대상: 한글이 없는 제목 중 캐시에 없는 것
+  const targets = [];
+  for (const r of reports) {
+    if (/[가-힣]/.test(r.title)) {
+      r.titleKo = r.title; // 이미 한국어 (한경 컨센서스 등)
+    } else if (transCache.has(r.title)) {
+      r.titleKo = transCache.get(r.title);
+    } else {
+      targets.push(r);
+    }
+  }
+
+  if (targets.length) {
+    try {
+      const anthropic = new Anthropic({ apiKey: key });
+      const list = targets.map((r, i) => `${i}. ${r.title}`).join('\n');
+      const msg = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2500,
+        messages: [
+          {
+            role: 'user',
+            content: `아래 영문 반도체·투자 리서치 헤드라인들을 자연스러운 한국어로 번역하세요.
+- 티커·기업명·기술 약어(TSMC, Nvidia, HBM, EUV, DRAM, NAND 등)는 그대로 두거나 통용 표기로
+- 기사 제목답게 간결하게, 의역 OK
+- 설명·주석 없이 번역문만
+
+JSON 배열만 출력: [{"i":0,"ko":"번역문"}, ...]
+
+${list}`,
+          },
+        ],
+      });
+      const text = msg.content?.[0]?.text || '[]';
+      const match = text.replace(/```json|```/g, '').match(/\[[\s\S]*\]/);
+      if (match) {
+        for (const item of JSON.parse(match[0])) {
+          const t = targets[item?.i];
+          if (t && item?.ko) {
+            t.titleKo = String(item.ko);
+            transCache.set(t.title, String(item.ko));
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[reports] 번역 실패:', e?.message || e);
+    }
+  }
+
+  // 번역 실패한 항목은 원문으로 폴백
+  for (const r of reports) if (!r.titleKo) r.titleKo = r.title;
+  return reports;
+}
+
 export async function GET() {
   const results = await Promise.allSettled([
     fromTrendforce('https://www.trendforce.com/presscenter', 'presscenter/news/', 'TrendForce 프레스'),
@@ -126,10 +198,12 @@ export async function GET() {
     fromHankyung(),
   ]);
 
-  const reports = results
+  let reports = results
     .filter((r) => r.status === 'fulfilled')
     .flatMap((r) => r.value)
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  reports = await translateTitles(reports);
 
   return Response.json({ reports, updatedAt: new Date().toISOString() });
 }
