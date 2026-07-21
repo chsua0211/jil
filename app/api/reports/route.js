@@ -60,8 +60,12 @@ async function fromRss(url, source, limit = 6) {
     const block = m[1];
     const title = decode(block.match(/<title>([\s\S]*?)<\/title>/)?.[1] || '');
     const link = decode(block.match(/<link>([\s\S]*?)<\/link>/)?.[1] || '');
-    const pub = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1];
-    const date = pub ? new Date(pub).toISOString().slice(0, 10) : null;
+    const pub = decode(block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] || '');
+    let date = null;
+    if (pub) {
+      const dt = new Date(pub);
+      if (!isNaN(dt.getTime())) date = dt.toISOString().slice(0, 10);
+    }
     if (title && link) items.push({ source, title, url: link, date });
     if (items.length >= limit) break;
   }
@@ -195,6 +199,8 @@ export async function GET() {
     fromTrendforce('https://www.trendforce.com/news', '/news/', 'TrendForce 뉴스'),
     fromRss('https://semianalysis.com/feed/', 'SemiAnalysis'),
     fromRss('https://www.fabricatedknowledge.com/feed', 'Fabricated Knowledge'),
+    fromRss('https://www.federalreserve.gov/feeds/press_all.xml', '연준(Fed)', 5),
+    fromRss('https://feeds.content.dowjones.io/public/rss/RSSMarketsMain', 'WSJ 마켓', 6),
     fromHankyung(),
   ]);
 

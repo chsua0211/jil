@@ -10,6 +10,8 @@ const SOURCE_COLORS = {
   'TrendForce 뉴스': '#e8b566',
   SemiAnalysis: '#4a8cff',
   'Fabricated Knowledge': '#8a7dff',
+  '연준(Fed)': '#e0555a',
+  'WSJ 마켓': '#3fb0c4',
   '한경 컨센서스': '#2ec26e',
 };
 
